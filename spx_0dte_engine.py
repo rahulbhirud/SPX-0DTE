@@ -993,7 +993,7 @@ class MeanReversionEngine:
 
     def get_status(self) -> dict:
         """Return current engine state for dashboard."""
-        return {
+        status = {
             "engine_active": self.engine_active,
             "environment": Config.TS_ENVIRONMENT,
             "account_id": self.api.account_id,
@@ -1011,6 +1011,125 @@ class MeanReversionEngine:
             "economic_events": self.calendar.get_events(),
             "last_bars": self._get_last_bars_summary(),
         }
+
+        # Add decision parameters for dashboard monitoring
+        status["indicators"] = self._get_indicator_snapshot()
+
+        return status
+
+    def _get_indicator_snapshot(self) -> dict:
+        """Return current indicator values and signal condition states."""
+        snapshot = {
+            "available": False,
+            "close": None, "vwap": None, "vwap_dev": None,
+            "rsi": None, "adx": None, "bb_upper": None,
+            "bb_mid": None, "bb_lower": None, "bb_pct": None,
+            "volume": None, "vol_avg": None, "vol_ratio": None,
+            "vol_ok": False, "candle_bull": False, "candle_bear": False,
+            "conditions": {},
+            "thresholds": {
+                "rsi_oversold": float(Config.RSI_OVERSOLD),
+                "rsi_overbought": float(Config.RSI_OVERBOUGHT),
+                "adx_threshold": float(Config.ADX_THRESHOLD),
+                "vwap_offset": float(Config.VWAP_OFFSET),
+                "vol_multiplier": float(Config.VOL_MULTIPLIER),
+                "vix_trending": 30.0,
+                "vix_low_vol": 12.0,
+                "adx_low_vol": 20.0,
+            },
+        }
+
+        if self.bars_df is None or len(self.bars_df) < Config.BB_PERIOD + 5:
+            return snapshot
+
+        try:
+            row = self.bars_df.iloc[-1]
+            prev = self.bars_df.iloc[-2]
+
+            close = float(row.get("close", row.get("Close", 0)))
+            vwap = float(row.get("vwap", close))
+            rsi = float(row.get("rsi", 50))
+            adx = float(row.get("adx", 30))
+            bb_upper = float(row.get("bb_upper", close + 10))
+            bb_mid = float(row.get("bb_mid", close))
+            bb_lower = float(row.get("bb_lower", close - 10))
+            volume = float(row.get("volume", row.get("TotalVolume", 0)))
+            vol_avg = float(row.get("vol_avg", 1))
+            vix = self.api._vix_cache["value"]
+
+            vwap_dev = (close - vwap) / vwap if vwap > 0 else 0
+            vol_ratio = volume / vol_avg if vol_avg > 0 else 0
+            vol_ok = bool(volume > Config.VOL_MULTIPLIER * vol_avg) if vol_avg > 0 else False
+            bb_range = bb_upper - bb_lower
+            bb_pct = (close - bb_lower) / bb_range if bb_range > 0 else 0.5
+            vix = float(vix)
+
+            candle_bull = bool(Indicators.is_reversal_candle(row, prev, "bull"))
+            candle_bear = bool(Indicators.is_reversal_candle(row, prev, "bear"))
+
+            # In-session and time checks
+            in_session = bool(self._in_session())
+            now_time = datetime.now().time()
+            before_cutoff = bool(now_time <= Config.NO_ENTRY_AFTER)
+            is_blackout, blackout_event = self.calendar.is_blackout()
+            is_blackout = bool(is_blackout)
+            within_limits = bool(self._within_limits())
+            no_open_trade = bool(self.open_trade is None)
+            not_trending = bool(self.current_regime != Regime.TRENDING)
+
+            snapshot.update({
+                "available": True,
+                "close": float(round(close, 2)),
+                "vwap": float(round(vwap, 2)),
+                "vwap_dev": float(round(vwap_dev * 100, 4)),
+                "rsi": float(round(rsi, 1)),
+                "adx": float(round(adx, 1)),
+                "vix": float(round(vix, 1)),
+                "bb_upper": float(round(bb_upper, 2)),
+                "bb_mid": float(round(bb_mid, 2)),
+                "bb_lower": float(round(bb_lower, 2)),
+                "bb_pct": float(round(bb_pct, 4)),
+                "volume": int(volume),
+                "vol_avg": int(vol_avg),
+                "vol_ratio": float(round(vol_ratio, 2)),
+                "vol_ok": vol_ok,
+                "candle_bull": candle_bull,
+                "candle_bear": candle_bear,
+                "conditions": {
+                    "long": {
+                        "below_bb_lower": bool(close < bb_lower),
+                        "vwap_negative": bool(vwap_dev < -Config.VWAP_OFFSET),
+                        "rsi_oversold": bool(rsi < Config.RSI_OVERSOLD),
+                        "adx_ok": bool(adx < Config.ADX_THRESHOLD),
+                        "vol_spike": vol_ok,
+                        "reversal_candle": candle_bull,
+                        "not_trending": not_trending,
+                        "in_session": in_session,
+                        "before_cutoff": before_cutoff,
+                        "no_blackout": not is_blackout,
+                        "within_limits": within_limits,
+                        "no_open_trade": no_open_trade,
+                    },
+                    "short": {
+                        "above_bb_upper": bool(close > bb_upper),
+                        "vwap_positive": bool(vwap_dev > Config.VWAP_OFFSET),
+                        "rsi_overbought": bool(rsi > Config.RSI_OVERBOUGHT),
+                        "adx_ok": bool(adx < Config.ADX_THRESHOLD),
+                        "vol_spike": vol_ok,
+                        "reversal_candle": candle_bear,
+                        "not_trending": not_trending,
+                        "in_session": in_session,
+                        "before_cutoff": before_cutoff,
+                        "no_blackout": not is_blackout,
+                        "within_limits": within_limits,
+                        "no_open_trade": no_open_trade,
+                    },
+                },
+            })
+        except Exception:
+            pass
+
+        return snapshot
 
     def get_trade_history(self) -> List[dict]:
         """Return trade history for dashboard."""

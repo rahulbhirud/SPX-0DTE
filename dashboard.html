@@ -134,9 +134,49 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);min-height:1
 /* Full-width panel */
 .panel-full{grid-column:1/-1}
 
+/* Decision Parameters Panel */
+.dp-grid{display:grid;grid-template-columns:1fr 1fr;gap:0;height:100%}
+.dp-indicators{padding:16px 18px;border-right:1px solid var(--border)}
+.dp-signals{padding:16px 18px}
+.dp-section-title{font-size:10px;text-transform:uppercase;letter-spacing:1.2px;color:var(--text3);font-weight:700;margin-bottom:12px}
+
+/* Indicator Gauges */
+.dp-gauge-list{display:flex;flex-direction:column;gap:10px}
+.dp-gauge{background:var(--bg3);border-radius:8px;padding:10px 14px}
+.dp-gauge-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
+.dp-gauge-label{font-size:11px;color:var(--text2);font-weight:500}
+.dp-gauge-value{font-family:var(--mono);font-size:13px;font-weight:700}
+.dp-gauge-bar{height:4px;background:var(--bg);border-radius:2px;overflow:hidden;position:relative}
+.dp-gauge-fill{height:100%;border-radius:2px;transition:width 0.4s ease,background 0.4s ease}
+.dp-gauge-sub{display:flex;justify-content:space-between;font-size:9px;color:var(--text3);font-family:var(--mono);margin-top:4px}
+.dp-gauge-markers{position:relative;height:0}
+.dp-gauge-marker{position:absolute;top:-4px;width:1px;height:4px;background:var(--yellow);opacity:0.7}
+
+/* BB Price Strip */
+.dp-bb-strip{background:var(--bg3);border-radius:8px;padding:12px 14px;margin-top:10px}
+.dp-bb-bar{position:relative;height:20px;background:var(--bg);border-radius:4px;margin:8px 0 4px}
+.dp-bb-zone{position:absolute;top:0;height:100%;border-radius:4px;opacity:0.15}
+.dp-bb-dot{position:absolute;top:50%;width:10px;height:10px;border-radius:50%;border:2px solid var(--bg);transform:translate(-50%,-50%);z-index:2;transition:left 0.4s ease}
+.dp-bb-label{position:absolute;top:50%;transform:translate(-50%,-50%);font-size:8px;font-family:var(--mono);color:var(--text3);pointer-events:none}
+
+/* Signal Checklist */
+.dp-signal-side{margin-bottom:16px}
+.dp-signal-header{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+.dp-signal-badge{font-family:var(--mono);font-size:10px;font-weight:700;padding:3px 8px;border-radius:4px;text-transform:uppercase;letter-spacing:0.5px}
+.dp-signal-count{font-family:var(--mono);font-size:10px;color:var(--text3)}
+.dp-check-list{display:flex;flex-direction:column;gap:4px}
+.dp-check{display:flex;align-items:center;gap:8px;padding:4px 8px;border-radius:4px;font-size:11px;font-family:var(--mono);transition:background 0.2s}
+.dp-check:hover{background:var(--bg3)}
+.dp-check-icon{width:16px;height:16px;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:9px;flex-shrink:0;border:1px solid var(--border)}
+.dp-check-pass{background:var(--green-bg);border-color:var(--green);color:var(--green)}
+.dp-check-fail{background:var(--bg3);border-color:var(--border);color:var(--text3)}
+.dp-check-label{color:var(--text2);flex:1}
+.dp-check-val{color:var(--text3);font-size:10px;text-align:right}
+.dp-no-data{padding:40px;text-align:center;color:var(--text3);font-size:13px}
+
 /* Responsive */
 @media(max-width:1200px){.metrics{grid-template-columns:repeat(3,1fr)}}
-@media(max-width:900px){.panels{grid-template-columns:1fr}.metrics{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:900px){.panels{grid-template-columns:1fr}.metrics{grid-template-columns:repeat(2,1fr)}.dp-grid{grid-template-columns:1fr}.dp-indicators{border-right:none;border-bottom:1px solid var(--border)}}
 @media(max-width:600px){.metrics{grid-template-columns:1fr}}
 
 /* Kill button */
@@ -215,6 +255,17 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);min-height:1
         <span class="panel-tag" style="background:var(--blue-bg);color:var(--blue)" id="lastPrice">—</span>
       </div>
       <div class="sparkline-container" id="sparkline"></div>
+    </div>
+
+    <!-- Decision Parameters Monitor -->
+    <div class="panel panel-full" id="decisionPanel">
+      <div class="panel-header">
+        <span class="panel-title">Decision Parameters — Live Indicators &amp; Signal Conditions</span>
+        <span class="panel-tag" id="dpStatus" style="background:var(--bg3);color:var(--text3)">WAITING</span>
+      </div>
+      <div id="dpBody">
+        <div class="dp-no-data">Waiting for indicator data...</div>
+      </div>
     </div>
 
     <!-- Panels Grid -->
@@ -376,6 +427,198 @@ async function updateStatus() {
 
   // Sparkline
   renderSparkline(data.last_bars || []);
+
+  // Decision Parameters
+  renderDecisionParams(data.indicators);
+}
+
+// ─── Decision Parameters ─────────────────────────
+function renderDecisionParams(ind) {
+  const body = document.getElementById('dpBody');
+  const tag = document.getElementById('dpStatus');
+
+  if (!ind || !ind.available) {
+    tag.textContent = 'WAITING';
+    tag.style.background = 'var(--bg3)';
+    tag.style.color = 'var(--text3)';
+    body.innerHTML = '<div class="dp-no-data">Waiting for indicator data — need at least 25 bars...</div>';
+    return;
+  }
+
+  tag.textContent = 'LIVE';
+  tag.style.background = 'var(--green-bg)';
+  tag.style.color = 'var(--green)';
+
+  const t = ind.thresholds;
+  const longC = ind.conditions.long || {};
+  const shortC = ind.conditions.short || {};
+
+  // Helper: gauge bar
+  function gauge(label, value, min, max, thresholds, unit) {
+    if (value === null || value === undefined) return '';
+    const pct = Math.max(0, Math.min(100, ((value - min) / (max - min)) * 100));
+    let color = 'var(--blue)';
+
+    // Color logic per indicator
+    if (label === 'RSI') {
+      color = value < t.rsi_oversold ? 'var(--green)' : value > t.rsi_overbought ? 'var(--red)' : 'var(--blue)';
+    } else if (label === 'ADX') {
+      color = value < 20 ? 'var(--yellow)' : value > t.adx_threshold ? 'var(--red)' : 'var(--green)';
+    } else if (label === 'VIX') {
+      color = value < t.vix_low_vol ? 'var(--yellow)' : value > t.vix_trending ? 'var(--red)' : 'var(--green)';
+    } else if (label === 'Vol Ratio') {
+      color = value >= t.vol_multiplier ? 'var(--green)' : 'var(--text3)';
+    } else if (label === 'VWAP Dev') {
+      color = Math.abs(value) > t.vwap_offset * 100 ? 'var(--green)' : 'var(--text3)';
+    }
+
+    // Threshold markers
+    let markers = '';
+    if (thresholds) {
+      markers = thresholds.map(th => {
+        const mPct = ((th - min) / (max - min)) * 100;
+        return `<div class="dp-gauge-marker" style="left:${mPct}%"></div>`;
+      }).join('');
+    }
+
+    const valStr = unit ? `${value}${unit}` : value;
+    return `
+      <div class="dp-gauge">
+        <div class="dp-gauge-header">
+          <span class="dp-gauge-label">${label}</span>
+          <span class="dp-gauge-value" style="color:${color}">${valStr}</span>
+        </div>
+        <div class="dp-gauge-bar">
+          <div class="dp-gauge-fill" style="width:${pct}%;background:${color}"></div>
+          <div class="dp-gauge-markers">${markers}</div>
+        </div>
+        <div class="dp-gauge-sub"><span>${min}</span><span>${max}</span></div>
+      </div>
+    `;
+  }
+
+  // BB position visual
+  const bbRange = ind.bb_upper - ind.bb_lower;
+  const bbPct = bbRange > 0 ? ((ind.close - ind.bb_lower) / bbRange) * 100 : 50;
+  const vwapPct = bbRange > 0 ? ((ind.vwap - ind.bb_lower) / bbRange) * 100 : 50;
+  const closeBBColor = ind.close < ind.bb_lower ? 'var(--green)' : ind.close > ind.bb_upper ? 'var(--red)' : 'var(--blue)';
+
+  // Signal check helper
+  function checkItem(pass, label, detail) {
+    const iconClass = pass ? 'dp-check-pass' : 'dp-check-fail';
+    const icon = pass ? '\u2713' : '\u2717';
+    return `
+      <div class="dp-check">
+        <div class="dp-check-icon ${iconClass}">${icon}</div>
+        <span class="dp-check-label">${label}</span>
+        <span class="dp-check-val">${detail || ''}</span>
+      </div>
+    `;
+  }
+
+  const longPassed = Object.values(longC).filter(v => v).length;
+  const shortPassed = Object.values(shortC).filter(v => v).length;
+  const longTotal = Object.keys(longC).length;
+  const shortTotal = Object.keys(shortC).length;
+
+  body.innerHTML = `
+    <div class="dp-grid">
+      <div class="dp-indicators">
+        <div class="dp-section-title">Technical Indicators</div>
+        <div class="dp-gauge-list">
+          ${gauge('RSI', ind.rsi, 0, 100, [t.rsi_oversold, t.rsi_overbought], '')}
+          ${gauge('ADX', ind.adx, 0, 50, [t.adx_low_vol, t.adx_threshold], '')}
+          ${gauge('VIX', ind.vix, 0, 50, [t.vix_low_vol, t.vix_trending], '')}
+          ${gauge('VWAP Dev', ind.vwap_dev, -1, 1, [-t.vwap_offset * 100, t.vwap_offset * 100], '%')}
+          ${gauge('Vol Ratio', ind.vol_ratio, 0, 3, [t.vol_multiplier], 'x')}
+        </div>
+
+        <div class="dp-bb-strip">
+          <div class="dp-section-title" style="margin-bottom:6px">Bollinger Bands — Price Position</div>
+          <div style="display:flex;justify-content:space-between;font-family:var(--mono);font-size:10px;color:var(--text3)">
+            <span>Lower: ${ind.bb_lower}</span>
+            <span style="color:var(--text2)">Mid: ${ind.bb_mid}</span>
+            <span>Upper: ${ind.bb_upper}</span>
+          </div>
+          <div class="dp-bb-bar">
+            <div class="dp-bb-zone" style="left:0;width:100%;background:var(--blue)"></div>
+            <div class="dp-bb-label" style="left:0%">LB</div>
+            <div class="dp-bb-label" style="left:50%">MID</div>
+            <div class="dp-bb-label" style="left:100%">UB</div>
+            <div class="dp-bb-dot" style="left:${Math.max(2, Math.min(98, vwapPct))}%;background:var(--yellow)" title="VWAP: ${ind.vwap}"></div>
+            <div class="dp-bb-dot" style="left:${Math.max(2, Math.min(98, bbPct))}%;background:${closeBBColor}" title="Close: ${ind.close}"></div>
+          </div>
+          <div style="display:flex;justify-content:center;gap:16px;font-size:9px;font-family:var(--mono);color:var(--text3);margin-top:2px">
+            <span><span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:${closeBBColor};vertical-align:middle"></span> Close ${ind.close}</span>
+            <span><span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--yellow);vertical-align:middle"></span> VWAP ${ind.vwap}</span>
+          </div>
+        </div>
+
+        <div class="dp-gauge" style="margin-top:10px">
+          <div class="dp-gauge-header">
+            <span class="dp-gauge-label">Candle Patterns</span>
+            <span class="dp-gauge-value" style="font-size:11px">
+              ${ind.candle_bull ? '<span style="color:var(--green)">BULL REV</span>' : ''}
+              ${ind.candle_bear ? '<span style="color:var(--red)">BEAR REV</span>' : ''}
+              ${!ind.candle_bull && !ind.candle_bear ? '<span style="color:var(--text3)">NONE</span>' : ''}
+            </span>
+          </div>
+          <div style="display:flex;gap:10px;font-size:10px;font-family:var(--mono);color:var(--text3)">
+            <span>Vol: ${ind.volume?.toLocaleString() || '—'}</span>
+            <span>Avg: ${ind.vol_avg?.toLocaleString() || '—'}</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="dp-signals">
+        <div class="dp-section-title">Signal Conditions Checklist</div>
+
+        <div class="dp-signal-side">
+          <div class="dp-signal-header">
+            <span class="dp-signal-badge" style="background:var(--green-bg);color:var(--green)">LONG</span>
+            <span class="dp-signal-count">${longPassed}/${longTotal} conditions met</span>
+            ${longPassed === longTotal ? '<span style="color:var(--green);font-size:10px;font-weight:700;font-family:var(--mono)">SIGNAL READY</span>' : ''}
+          </div>
+          <div class="dp-check-list">
+            ${checkItem(longC.below_bb_lower, 'Price < Lower BB', `${ind.close} ${longC.below_bb_lower ? '<' : '>'} ${ind.bb_lower}`)}
+            ${checkItem(longC.vwap_negative, 'VWAP Dev < -' + (t.vwap_offset * 100).toFixed(1) + '%', `${ind.vwap_dev}%`)}
+            ${checkItem(longC.rsi_oversold, 'RSI < ' + t.rsi_oversold + ' (Oversold)', `RSI: ${ind.rsi}`)}
+            ${checkItem(longC.adx_ok, 'ADX < ' + t.adx_threshold + ' (Mean Rev)', `ADX: ${ind.adx}`)}
+            ${checkItem(longC.vol_spike, 'Volume Spike (>' + t.vol_multiplier + 'x avg)', `${ind.vol_ratio}x`)}
+            ${checkItem(longC.reversal_candle, 'Bullish Reversal Candle', ind.candle_bull ? 'Detected' : 'None')}
+            ${checkItem(longC.not_trending, 'Regime Not Trending', '')}
+            ${checkItem(longC.in_session, 'In Trading Session', '')}
+            ${checkItem(longC.before_cutoff, 'Before Entry Cutoff', '')}
+            ${checkItem(longC.no_blackout, 'No Economic Blackout', '')}
+            ${checkItem(longC.within_limits, 'Within Risk Limits', '')}
+            ${checkItem(longC.no_open_trade, 'No Open Position', '')}
+          </div>
+        </div>
+
+        <div class="dp-signal-side">
+          <div class="dp-signal-header">
+            <span class="dp-signal-badge" style="background:var(--red-bg);color:var(--red)">SHORT</span>
+            <span class="dp-signal-count">${shortPassed}/${shortTotal} conditions met</span>
+            ${shortPassed === shortTotal ? '<span style="color:var(--red);font-size:10px;font-weight:700;font-family:var(--mono)">SIGNAL READY</span>' : ''}
+          </div>
+          <div class="dp-check-list">
+            ${checkItem(shortC.above_bb_upper, 'Price > Upper BB', `${ind.close} ${shortC.above_bb_upper ? '>' : '<'} ${ind.bb_upper}`)}
+            ${checkItem(shortC.vwap_positive, 'VWAP Dev > +' + (t.vwap_offset * 100).toFixed(1) + '%', `${ind.vwap_dev}%`)}
+            ${checkItem(shortC.rsi_overbought, 'RSI > ' + t.rsi_overbought + ' (Overbought)', `RSI: ${ind.rsi}`)}
+            ${checkItem(shortC.adx_ok, 'ADX < ' + t.adx_threshold + ' (Mean Rev)', `ADX: ${ind.adx}`)}
+            ${checkItem(shortC.vol_spike, 'Volume Spike (>' + t.vol_multiplier + 'x avg)', `${ind.vol_ratio}x`)}
+            ${checkItem(shortC.reversal_candle, 'Bearish Reversal Candle', ind.candle_bear ? 'Detected' : 'None')}
+            ${checkItem(shortC.not_trending, 'Regime Not Trending', '')}
+            ${checkItem(shortC.in_session, 'In Trading Session', '')}
+            ${checkItem(shortC.before_cutoff, 'Before Entry Cutoff', '')}
+            ${checkItem(shortC.no_blackout, 'No Economic Blackout', '')}
+            ${checkItem(shortC.within_limits, 'Within Risk Limits', '')}
+            ${checkItem(shortC.no_open_trade, 'No Open Position', '')}
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
 }
 
 // ─── Open Trade ──────────────────────────────────
