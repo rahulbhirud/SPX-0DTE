@@ -1,2 +1,7 @@
-# SPX-0DTE
-SPX-0DTE
+# SPX 0DTE Mean Reversion Engine — Dependencies
+requests>=2.31.0
+pandas>=2.0.0
+numpy>=1.24.0
+python-dotenv>=1.0.0
+flask>=3.0.0
+flask-cors>=4.0.0

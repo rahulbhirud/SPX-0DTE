@@ -1,0 +1,608 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SPX 0DTE — Live Monitor</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;600;700&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #08090d;
+  --bg2: #0e1017;
+  --bg3: #141620;
+  --bg4: #1a1d2a;
+  --border: #242838;
+  --text: #dfe2f0;
+  --text2: #7d84a0;
+  --text3: #4a5070;
+  --green: #22d68a;
+  --green-bg: #22d68a15;
+  --red: #ef4466;
+  --red-bg: #ef446615;
+  --blue: #3b8beb;
+  --blue-bg: #3b8beb15;
+  --yellow: #f0b429;
+  --yellow-bg: #f0b42915;
+  --purple: #9b6dff;
+  --mono: 'IBM Plex Mono', monospace;
+  --sans: 'Outfit', sans-serif;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:var(--bg);color:var(--text);font-family:var(--sans);min-height:100vh;overflow-x:hidden}
+
+/* Layout */
+.app{display:grid;grid-template-columns:1fr;gap:0;min-height:100vh}
+.topbar{display:flex;align-items:center;justify-content:space-between;padding:16px 24px;border-bottom:1px solid var(--border);background:var(--bg2);position:sticky;top:0;z-index:100}
+.topbar-left{display:flex;align-items:center;gap:14px}
+.logo{width:36px;height:36px;background:linear-gradient(135deg,var(--blue),var(--green));border-radius:8px;display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-weight:700;font-size:12px;color:var(--bg)}
+.topbar h1{font-size:16px;font-weight:600;letter-spacing:-0.3px}
+.topbar .env{font-family:var(--mono);font-size:11px;padding:4px 10px;border-radius:4px;font-weight:600}
+.env-sim{background:var(--yellow-bg);color:var(--yellow);border:1px solid var(--yellow)}
+.env-live{background:var(--red-bg);color:var(--red);border:1px solid var(--red)}
+.topbar-right{display:flex;align-items:center;gap:12px}
+.status-pill{display:flex;align-items:center;gap:8px;padding:6px 14px;border-radius:100px;font-size:12px;font-family:var(--mono);font-weight:500}
+.status-active{background:var(--green-bg);color:var(--green);border:1px solid var(--green)}
+.status-inactive{background:var(--red-bg);color:var(--red);border:1px solid var(--red)}
+.dot{width:8px;height:8px;border-radius:50%;animation:blink 2s infinite}
+.dot-green{background:var(--green)}
+.dot-red{background:var(--red)}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
+
+.main{padding:20px 24px;display:flex;flex-direction:column;gap:20px}
+
+/* Metric Cards */
+.metrics{display:grid;grid-template-columns:repeat(6,1fr);gap:14px}
+.metric{background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:16px 18px}
+.metric-label{font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:1px;font-weight:600;margin-bottom:8px}
+.metric-value{font-size:26px;font-weight:700;font-family:var(--mono);letter-spacing:-1px}
+.metric-sub{font-size:11px;color:var(--text3);margin-top:4px}
+.val-green{color:var(--green)}.val-red{color:var(--red)}.val-blue{color:var(--blue)}.val-yellow{color:var(--yellow)}
+
+/* Sections Grid */
+.panels{display:grid;grid-template-columns:1fr 1fr;gap:20px}
+.panel{background:var(--bg2);border:1px solid var(--border);border-radius:12px;overflow:hidden}
+.panel-header{display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid var(--border)}
+.panel-title{font-size:13px;font-weight:600;letter-spacing:-0.2px}
+.panel-tag{font-family:var(--mono);font-size:10px;padding:3px 8px;border-radius:4px;font-weight:500}
+.panel-body{padding:0;max-height:400px;overflow-y:auto}
+.panel-body::-webkit-scrollbar{width:4px}
+.panel-body::-webkit-scrollbar-track{background:var(--bg2)}
+.panel-body::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
+
+/* Open Trade Card */
+.trade-card{padding:18px;display:flex;flex-direction:column;gap:14px}
+.trade-header{display:flex;align-items:center;justify-content:space-between}
+.trade-symbol{font-family:var(--mono);font-size:14px;font-weight:600}
+.trade-signal{font-size:11px;font-weight:700;padding:4px 10px;border-radius:4px;text-transform:uppercase;letter-spacing:0.5px}
+.signal-long{background:var(--green-bg);color:var(--green)}
+.signal-short{background:var(--red-bg);color:var(--red)}
+.trade-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.trade-field{background:var(--bg3);border-radius:6px;padding:10px 12px}
+.trade-field-label{font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px}
+.trade-field-value{font-family:var(--mono);font-size:13px;font-weight:600}
+.trade-actions{display:flex;gap:10px;margin-top:6px}
+.btn{padding:8px 16px;border:none;border-radius:6px;font-family:var(--sans);font-size:12px;font-weight:600;cursor:pointer;transition:all .15s}
+.btn-danger{background:var(--red);color:#fff}
+.btn-danger:hover{filter:brightness(1.2)}
+.btn-outline{background:transparent;color:var(--text2);border:1px solid var(--border)}
+.btn-outline:hover{border-color:var(--text2)}
+.no-trade{padding:40px;text-align:center;color:var(--text3);font-size:13px}
+
+/* Trade History Table */
+.history-table{width:100%;border-collapse:collapse}
+.history-table th{text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--text3);padding:10px 14px;border-bottom:1px solid var(--border);font-weight:600;position:sticky;top:0;background:var(--bg2)}
+.history-table td{padding:10px 14px;font-size:12px;border-bottom:1px solid #1a1d28;font-family:var(--mono);color:var(--text2)}
+.history-table tr:hover td{background:var(--bg3)}
+.result-tp{color:var(--green);font-weight:600}.result-sl{color:var(--red);font-weight:600}
+.result-be{color:var(--yellow);font-weight:600}.result-time{color:var(--blue);font-weight:600}
+
+/* Log Stream */
+.log-stream{padding:0}
+.log-entry{display:flex;gap:10px;padding:8px 14px;border-bottom:1px solid #12141e;font-size:11px;font-family:var(--mono);line-height:1.4}
+.log-entry:hover{background:var(--bg3)}
+.log-time{color:var(--text3);flex-shrink:0;width:70px}
+.log-level{flex-shrink:0;width:55px;font-weight:600;text-transform:uppercase;font-size:10px}
+.log-level-info{color:var(--blue)}.log-level-trade{color:var(--green)}
+.log-level-warning{color:var(--yellow)}.log-level-error{color:var(--red)}
+.log-level-alert{color:var(--red);animation:blink 1.5s infinite}
+.log-cat{color:var(--text3);flex-shrink:0;width:70px;font-size:10px}
+.log-msg{color:var(--text2);word-break:break-all;flex:1}
+
+/* Alert Strip */
+.alert-strip{background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:14px 18px;display:flex;align-items:center;gap:12px}
+.alert-strip.has-alert{border-color:var(--red);background:var(--red-bg)}
+.alert-strip .alert-icon{font-size:18px}
+.alert-strip .alert-msg{font-size:13px;color:var(--text2);flex:1}
+.alert-strip .alert-time{font-family:var(--mono);font-size:11px;color:var(--text3)}
+
+/* Regime Badge */
+.regime-badge{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:4px;font-family:var(--mono);font-size:11px;font-weight:600}
+.regime-mean_reverting{background:var(--green-bg);color:var(--green)}
+.regime-low_vol{background:var(--yellow-bg);color:var(--yellow)}
+.regime-trending{background:var(--red-bg);color:var(--red)}
+
+/* Sparkline */
+.sparkline-container{height:50px;display:flex;align-items:flex-end;gap:2px;padding:8px 18px}
+.spark-bar{background:var(--blue);border-radius:2px 2px 0 0;min-width:4px;flex:1;transition:height .3s}
+
+/* Econ Events */
+.econ-event{display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid #12141e}
+.econ-dot{width:8px;height:8px;border-radius:50%}
+.econ-dot-critical{background:var(--red)}.econ-dot-high{background:var(--yellow)}.econ-dot-medium{background:var(--blue)}.econ-dot-low{background:var(--text3)}
+.econ-name{font-size:12px;flex:1}.econ-time{font-family:var(--mono);font-size:11px;color:var(--text3)}
+
+/* Full-width panel */
+.panel-full{grid-column:1/-1}
+
+/* Responsive */
+@media(max-width:1200px){.metrics{grid-template-columns:repeat(3,1fr)}}
+@media(max-width:900px){.panels{grid-template-columns:1fr}.metrics{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:600px){.metrics{grid-template-columns:1fr}}
+
+/* Kill button */
+.btn-kill{background:transparent;color:var(--red);border:1px solid var(--red);padding:6px 14px;font-size:11px;font-family:var(--mono)}
+.btn-kill:hover{background:var(--red);color:#fff}
+</style>
+</head>
+<body>
+
+<div class="app">
+  <!-- Top Bar -->
+  <div class="topbar">
+    <div class="topbar-left">
+      <div class="logo">MR</div>
+      <div>
+        <h1>SPX 0DTE Mean Reversion</h1>
+      </div>
+      <span class="env env-sim" id="envBadge">SIM</span>
+    </div>
+    <div class="topbar-right">
+      <div class="status-pill status-active" id="statusPill">
+        <span class="dot dot-green" id="statusDot"></span>
+        <span id="statusText">CONNECTING</span>
+      </div>
+      <button class="btn btn-kill" onclick="killEngine()">KILL SWITCH</button>
+    </div>
+  </div>
+
+  <div class="main">
+
+    <!-- Alert Strip -->
+    <div class="alert-strip" id="alertStrip">
+      <div class="alert-icon" id="alertIcon">ℹ️</div>
+      <div class="alert-msg" id="alertMsg">Initializing connection to engine...</div>
+      <div class="alert-time" id="alertTime"></div>
+    </div>
+
+    <!-- KPI Metrics -->
+    <div class="metrics">
+      <div class="metric">
+        <div class="metric-label">Daily P/L</div>
+        <div class="metric-value val-green" id="dailyPnl">$0.00</div>
+        <div class="metric-sub" id="pnlPct">0.0%</div>
+      </div>
+      <div class="metric">
+        <div class="metric-label">Trades Today</div>
+        <div class="metric-value val-blue" id="tradesToday">0</div>
+        <div class="metric-sub" id="tradesMax">of 8 max</div>
+      </div>
+      <div class="metric">
+        <div class="metric-label">Win Rate</div>
+        <div class="metric-value val-green" id="winRate">—</div>
+        <div class="metric-sub" id="winLoss">0W / 0L</div>
+      </div>
+      <div class="metric">
+        <div class="metric-label">Regime</div>
+        <div class="metric-value" id="regime" style="font-size:16px">—</div>
+        <div class="metric-sub" id="vixValue">VIX: —</div>
+      </div>
+      <div class="metric">
+        <div class="metric-label">Consec. Losses</div>
+        <div class="metric-value" id="consecLosses">0</div>
+        <div class="metric-sub" id="cooldownSub">No cooldown</div>
+      </div>
+      <div class="metric">
+        <div class="metric-label">Account Balance</div>
+        <div class="metric-value val-blue" id="balance">—</div>
+        <div class="metric-sub" id="balanceSub"></div>
+      </div>
+    </div>
+
+    <!-- SPX Price Sparkline -->
+    <div class="panel">
+      <div class="panel-header">
+        <span class="panel-title">$SPX.X — 5min Bars</span>
+        <span class="panel-tag" style="background:var(--blue-bg);color:var(--blue)" id="lastPrice">—</span>
+      </div>
+      <div class="sparkline-container" id="sparkline"></div>
+    </div>
+
+    <!-- Panels Grid -->
+    <div class="panels">
+
+      <!-- Open Trade -->
+      <div class="panel">
+        <div class="panel-header">
+          <span class="panel-title">Open Position</span>
+          <span class="panel-tag" id="posStatus" style="background:var(--bg3);color:var(--text3)">FLAT</span>
+        </div>
+        <div class="panel-body" id="openTradePanel">
+          <div class="no-trade" id="noTrade">No open position — waiting for signal</div>
+        </div>
+      </div>
+
+      <!-- Economic Calendar -->
+      <div class="panel">
+        <div class="panel-header">
+          <span class="panel-title">Economic Calendar</span>
+          <span class="panel-tag" style="background:var(--yellow-bg);color:var(--yellow)" id="econCount">0 events</span>
+        </div>
+        <div class="panel-body" id="econPanel">
+          <div class="no-trade">No economic events today</div>
+        </div>
+      </div>
+
+      <!-- Trade History -->
+      <div class="panel panel-full">
+        <div class="panel-header">
+          <span class="panel-title">Trade History</span>
+          <span class="panel-tag" style="background:var(--bg3);color:var(--text2)" id="historyCount">0 trades</span>
+        </div>
+        <div class="panel-body" id="historyPanel">
+          <table class="history-table">
+            <thead>
+              <tr>
+                <th>Time</th>
+                <th>Signal</th>
+                <th>Symbol</th>
+                <th>Entry</th>
+                <th>Exit</th>
+                <th>Qty</th>
+                <th>Result</th>
+                <th>P/L</th>
+              </tr>
+            </thead>
+            <tbody id="historyBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Live Logs -->
+      <div class="panel panel-full">
+        <div class="panel-header">
+          <span class="panel-title">Live Log Stream</span>
+          <div style="display:flex;gap:6px">
+            <button class="btn btn-outline" style="font-size:10px;padding:4px 10px" onclick="filterLogs('ALL')">All</button>
+            <button class="btn btn-outline" style="font-size:10px;padding:4px 10px" onclick="filterLogs('TRADE')">Trades</button>
+            <button class="btn btn-outline" style="font-size:10px;padding:4px 10px" onclick="filterLogs('ALERT')">Alerts</button>
+            <button class="btn btn-outline" style="font-size:10px;padding:4px 10px" onclick="filterLogs('ERROR')">Errors</button>
+          </div>
+        </div>
+        <div class="panel-body log-stream" id="logPanel" style="max-height:350px"></div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script>
+// ─── Configuration ───────────────────────────────
+const API_BASE = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+  ? `http://${window.location.hostname}:5000`
+  : window.location.origin;
+const POLL_INTERVAL = 3000;    // Poll every 3 seconds
+const LOG_POLL = 5000;         // Logs every 5 seconds
+
+let currentLogFilter = 'ALL';
+let lastAlertMsg = '';
+
+// ─── Data Fetching ───────────────────────────────
+async function fetchJSON(endpoint) {
+  try {
+    const resp = await fetch(`${API_BASE}/api/${endpoint}`);
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    return await resp.json();
+  } catch (e) {
+    return null;
+  }
+}
+
+// ─── Status Update ───────────────────────────────
+async function updateStatus() {
+  const data = await fetchJSON('status');
+  if (!data) {
+    document.getElementById('statusText').textContent = 'OFFLINE';
+    document.getElementById('statusPill').className = 'status-pill status-inactive';
+    document.getElementById('statusDot').className = 'dot dot-red';
+    return;
+  }
+
+  // Connection status
+  const active = data.engine_active;
+  document.getElementById('statusText').textContent = active ? 'RUNNING' : 'STOPPED';
+  document.getElementById('statusPill').className = `status-pill ${active ? 'status-active' : 'status-inactive'}`;
+  document.getElementById('statusDot').className = `dot ${active ? 'dot-green' : 'dot-red'}`;
+
+  // Reset alert strip to show connection state until a real alert arrives.
+  if (!lastAlertMsg) {
+    const strip = document.getElementById('alertStrip');
+    strip.className = 'alert-strip';
+    document.getElementById('alertIcon').textContent = active ? '✅' : 'ℹ️';
+    document.getElementById('alertMsg').textContent = active ? 'Engine connected and monitoring.' : 'Engine reachable but idle.';
+    document.getElementById('alertTime').textContent = new Date().toLocaleTimeString('en-US', { hour12: false });
+  }
+
+  // Environment badge
+  const envBadge = document.getElementById('envBadge');
+  envBadge.textContent = data.environment;
+  envBadge.className = `env ${data.environment === 'LIVE' ? 'env-live' : 'env-sim'}`;
+
+  // Metrics
+  const pnl = data.daily_pnl || 0;
+  const pnlEl = document.getElementById('dailyPnl');
+  pnlEl.textContent = `$${pnl >= 0 ? '+' : ''}${pnl.toFixed(2)}`;
+  pnlEl.className = `metric-value ${pnl >= 0 ? 'val-green' : 'val-red'}`;
+
+  const bal = data.account_balance || 0;
+  if (bal > 0) {
+    document.getElementById('pnlPct').textContent = `${(pnl / bal * 100).toFixed(2)}%`;
+  }
+
+  document.getElementById('tradesToday').textContent = data.trades_today || 0;
+  document.getElementById('tradesMax').textContent = `of ${data.max_trades} max`;
+
+  document.getElementById('balance').textContent = bal > 0 ? `$${bal.toLocaleString('en-US', {minimumFractionDigits: 0})}` : '—';
+
+  // Regime
+  const regime = data.current_regime || 'unknown';
+  const regimeEl = document.getElementById('regime');
+  regimeEl.innerHTML = `<span class="regime-badge regime-${regime}">${regime.replace('_', ' ').toUpperCase()}</span>`;
+  document.getElementById('vixValue').textContent = `VIX: ${(data.vix || 0).toFixed(1)}`;
+
+  // Consecutive losses
+  const cl = data.consecutive_losses || 0;
+  const clEl = document.getElementById('consecLosses');
+  clEl.textContent = cl;
+  clEl.className = `metric-value ${cl >= 2 ? 'val-red' : cl >= 1 ? 'val-yellow' : ''}`;
+  document.getElementById('cooldownSub').textContent = data.cooldown_until
+    ? `Cooldown until ${data.cooldown_until.slice(11, 16)}`
+    : 'No cooldown';
+
+  // Open Trade
+  renderOpenTrade(data.open_trade);
+
+  // Economic Events
+  renderEconEvents(data.economic_events || []);
+
+  // Sparkline
+  renderSparkline(data.last_bars || []);
+}
+
+// ─── Open Trade ──────────────────────────────────
+function renderOpenTrade(trade) {
+  const panel = document.getElementById('openTradePanel');
+  const posStatus = document.getElementById('posStatus');
+
+  if (!trade) {
+    posStatus.textContent = 'FLAT';
+    posStatus.style.background = 'var(--bg3)';
+    posStatus.style.color = 'var(--text3)';
+    panel.innerHTML = '<div class="no-trade">No open position — waiting for signal</div>';
+    return;
+  }
+
+  const isLong = trade.signal === 'long';
+  posStatus.textContent = isLong ? 'LONG' : 'SHORT';
+  posStatus.style.background = isLong ? 'var(--green-bg)' : 'var(--red-bg)';
+  posStatus.style.color = isLong ? 'var(--green)' : 'var(--red)';
+
+  const pnl = trade.unrealized_pnl || 0;
+  const pnlClass = pnl >= 0 ? 'val-green' : 'val-red';
+
+  panel.innerHTML = `
+    <div class="trade-card">
+      <div class="trade-header">
+        <span class="trade-symbol">${trade.option_symbol}</span>
+        <span class="trade-signal ${isLong ? 'signal-long' : 'signal-short'}">${trade.signal}</span>
+      </div>
+      <div class="trade-grid">
+        <div class="trade-field">
+          <div class="trade-field-label">Entry</div>
+          <div class="trade-field-value">$${trade.entry_price.toFixed(2)}</div>
+        </div>
+        <div class="trade-field">
+          <div class="trade-field-label">Current</div>
+          <div class="trade-field-value ${pnlClass}">$${trade.current_price.toFixed(2)}</div>
+        </div>
+        <div class="trade-field">
+          <div class="trade-field-label">Unrealized P/L</div>
+          <div class="trade-field-value ${pnlClass}">$${pnl >= 0 ? '+' : ''}${pnl.toFixed(2)}</div>
+        </div>
+        <div class="trade-field">
+          <div class="trade-field-label">Stop Loss</div>
+          <div class="trade-field-value val-red">$${trade.stop_loss.toFixed(2)}${trade.be_trailed ? ' (BE)' : ''}</div>
+        </div>
+        <div class="trade-field">
+          <div class="trade-field-label">Take Profit</div>
+          <div class="trade-field-value val-green">$${trade.take_profit.toFixed(2)}</div>
+        </div>
+        <div class="trade-field">
+          <div class="trade-field-label">Elapsed</div>
+          <div class="trade-field-value ${trade.elapsed_min > 20 ? 'val-yellow' : ''}">${trade.elapsed_min.toFixed(1)} min</div>
+        </div>
+        <div class="trade-field">
+          <div class="trade-field-label">Quantity</div>
+          <div class="trade-field-value">${trade.quantity}</div>
+        </div>
+        <div class="trade-field">
+          <div class="trade-field-label">Risk $</div>
+          <div class="trade-field-value val-red">$${trade.risk_amount.toFixed(0)}</div>
+        </div>
+        <div class="trade-field">
+          <div class="trade-field-label">Reward $</div>
+          <div class="trade-field-value val-green">$${trade.reward_amount.toFixed(0)}</div>
+        </div>
+      </div>
+      <div class="trade-actions">
+        <button class="btn btn-danger" onclick="forceClose()">Force Close</button>
+        <button class="btn btn-outline" onclick="updateStatus()">Refresh</button>
+      </div>
+    </div>
+  `;
+}
+
+// ─── Economic Events ─────────────────────────────
+function renderEconEvents(events) {
+  const panel = document.getElementById('econPanel');
+  document.getElementById('econCount').textContent = `${events.length} event${events.length !== 1 ? 's' : ''}`;
+
+  if (events.length === 0) {
+    panel.innerHTML = '<div class="no-trade" style="padding:20px">No economic events today — clear to trade</div>';
+    return;
+  }
+
+  panel.innerHTML = events.map(e => {
+    const impact = (e.impact || 'LOW').toLowerCase();
+    const timeStr = e.time === '00:00:00' ? 'ALL DAY' : e.time;
+    return `
+      <div class="econ-event">
+        <span class="econ-dot econ-dot-${impact}"></span>
+        <span class="econ-name">${e.name}</span>
+        <span class="econ-time">${timeStr} (${e.blackout_min}min blackout)</span>
+      </div>
+    `;
+  }).join('');
+}
+
+// ─── Sparkline ───────────────────────────────────
+function renderSparkline(prices) {
+  const container = document.getElementById('sparkline');
+  if (!prices || prices.length === 0) {
+    container.innerHTML = '<span style="color:var(--text3);font-size:12px;padding:10px">Waiting for data...</span>';
+    return;
+  }
+
+  const min = Math.min(...prices);
+  const max = Math.max(...prices);
+  const range = max - min || 1;
+  const lastPrice = prices[prices.length - 1];
+
+  document.getElementById('lastPrice').textContent = `$${lastPrice.toFixed(2)}`;
+
+  container.innerHTML = prices.map((p, i) => {
+    const height = Math.max(4, ((p - min) / range) * 45);
+    const isLast = i === prices.length - 1;
+    const color = isLast ? 'var(--green)' : (p >= prices[Math.max(0, i-1)] ? 'var(--blue)' : 'var(--red)');
+    return `<div class="spark-bar" style="height:${height}px;background:${color};opacity:${isLast ? 1 : 0.5 + i/prices.length*0.5}"></div>`;
+  }).join('');
+}
+
+// ─── Trade History ───────────────────────────────
+async function updateHistory() {
+  const trades = await fetchJSON('trades');
+  if (!trades) return;
+
+  const tbody = document.getElementById('historyBody');
+  document.getElementById('historyCount').textContent = `${trades.length} trade${trades.length !== 1 ? 's' : ''}`;
+
+  // Win rate
+  const wins = trades.filter(t => t.pnl > 0).length;
+  const losses = trades.filter(t => t.pnl <= 0).length;
+  const total = trades.length;
+  const wr = total > 0 ? (wins / total * 100).toFixed(0) : '—';
+  document.getElementById('winRate').textContent = total > 0 ? `${wr}%` : '—';
+  document.getElementById('winRate').className = `metric-value ${parseInt(wr) >= 70 ? 'val-green' : parseInt(wr) >= 50 ? 'val-yellow' : 'val-red'}`;
+  document.getElementById('winLoss').textContent = `${wins}W / ${losses}L`;
+
+  tbody.innerHTML = trades.slice().reverse().map(t => {
+    const resultClass = t.result === 'TP' ? 'result-tp' : t.result === 'SL' ? 'result-sl' : t.result === 'BE' ? 'result-be' : 'result-time';
+    const pnlClass = t.pnl >= 0 ? 'val-green' : 'val-red';
+    const time = t.entry_time ? t.entry_time.slice(11, 19) : '—';
+    return `
+      <tr>
+        <td>${time}</td>
+        <td><span class="trade-signal ${t.signal === 'long' ? 'signal-long' : 'signal-short'}" style="font-size:10px;padding:2px 6px">${t.signal}</span></td>
+        <td>${t.symbol || '—'}</td>
+        <td>$${(t.entry || 0).toFixed(2)}</td>
+        <td>$${(t.exit || 0).toFixed(2)}</td>
+        <td>${t.qty || 0}</td>
+        <td class="${resultClass}">${t.result}</td>
+        <td class="${pnlClass}">$${t.pnl >= 0 ? '+' : ''}${(t.pnl || 0).toFixed(2)}</td>
+      </tr>
+    `;
+  }).join('');
+}
+
+// ─── Live Logs ───────────────────────────────────
+async function updateLogs() {
+  const logs = await fetchJSON('logs?limit=150');
+  if (!logs) return;
+
+  const panel = document.getElementById('logPanel');
+
+  const filtered = currentLogFilter === 'ALL'
+    ? logs
+    : logs.filter(l => l.level === currentLogFilter || l.category === currentLogFilter);
+
+  panel.innerHTML = filtered.slice().reverse().map(l => {
+    const time = l.timestamp ? l.timestamp.slice(11, 19) : '';
+    const levelClass = `log-level-${l.level.toLowerCase()}`;
+    return `
+      <div class="log-entry">
+        <span class="log-time">${time}</span>
+        <span class="log-level ${levelClass}">${l.level}</span>
+        <span class="log-cat">${l.category}</span>
+        <span class="log-msg">${l.message}</span>
+      </div>
+    `;
+  }).join('');
+
+  // Update alert strip with latest alert
+  const alerts = filtered.filter(l => l.level === 'ALERT' || l.level === 'ERROR');
+  if (alerts.length > 0) {
+    const latest = alerts[alerts.length - 1];
+    if (latest.message !== lastAlertMsg) {
+      lastAlertMsg = latest.message;
+      const strip = document.getElementById('alertStrip');
+      strip.className = 'alert-strip has-alert';
+      document.getElementById('alertIcon').textContent = latest.level === 'ERROR' ? '❌' : '🚨';
+      document.getElementById('alertMsg').textContent = latest.message;
+      document.getElementById('alertTime').textContent = latest.timestamp ? latest.timestamp.slice(11, 19) : '';
+    }
+  }
+}
+
+function filterLogs(filter) {
+  currentLogFilter = filter;
+  updateLogs();
+}
+
+// ─── Actions ─────────────────────────────────────
+async function killEngine() {
+  if (!confirm('Are you sure you want to KILL the engine? This will close all positions and stop trading.')) return;
+  await fetch(`${API_BASE}/api/kill`, { method: 'POST' });
+  updateStatus();
+}
+
+async function forceClose() {
+  if (!confirm('Force close the open position at market price?')) return;
+  await fetch(`${API_BASE}/api/close_position`, { method: 'POST' });
+  updateStatus();
+}
+
+// ─── Polling Loop ────────────────────────────────
+async function poll() {
+  await updateStatus();
+  await updateHistory();
+}
+
+setInterval(poll, POLL_INTERVAL);
+setInterval(updateLogs, LOG_POLL);
+
+// Initial load
+poll();
+updateLogs();
+</script>
+
+</body>
+</html>
