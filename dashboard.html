@@ -339,6 +339,9 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);min-height:1
 .session-post{border-color:var(--text3);background:var(--bg3)}
 .session-post .session-state{color:var(--text3)}
 .session-post .session-bar-fill{background:var(--text3)}
+.session-closed{border-color:var(--red);background:var(--red-bg)}
+.session-closed .session-state{color:var(--red)}
+.session-closed .session-bar-fill{background:var(--red)}
 </style>
 </head>
 <body>
@@ -513,6 +516,7 @@ const LOG_POLL = 5000;         // Logs every 5 seconds
 
 let currentLogFilter = 'ALL';
 let lastAlertMsg = '';
+let isTradingDay = true;  // Updated from status API
 
 // ─── Session Window Indicator ────────────────────
 // Times in minutes from midnight (ET)
@@ -535,12 +539,17 @@ function updateSessionIndicator() {
   const mins = parseInt(parts[0]) * 60 + parseInt(parts[1]);
 
   // Remove all state classes
-  el.classList.remove('session-active', 'session-entries-closed', 'session-eod', 'session-pre', 'session-post');
+  el.classList.remove('session-active', 'session-entries-closed', 'session-eod', 'session-pre', 'session-post', 'session-closed');
 
   let stateText, stateClass;
   let barPct = 0;
 
-  if (mins < SESSION_PRE_END) {
+  // If not a trading day (weekend or holiday), override everything
+  if (!isTradingDay) {
+    stateText = 'MARKET CLOSED';
+    stateClass = 'session-closed';
+    barPct = 0;
+  } else if (mins < SESSION_PRE_END) {
     stateText = 'PRE-MARKET';
     stateClass = 'session-pre';
     barPct = 0;
@@ -597,6 +606,12 @@ async function updateStatus() {
   document.getElementById('statusText').textContent = active ? 'RUNNING' : 'STOPPED';
   document.getElementById('statusPill').className = `status-pill ${active ? 'status-active' : 'status-inactive'}`;
   document.getElementById('statusDot').className = `dot ${active ? 'dot-green' : 'dot-red'}`;
+
+  // Update trading day flag and refresh session indicator
+  if (data.is_trading_day !== undefined) {
+    isTradingDay = data.is_trading_day;
+    updateSessionIndicator();
+  }
 
   // Reset alert strip to show connection state until a real alert arrives.
   if (!lastAlertMsg) {

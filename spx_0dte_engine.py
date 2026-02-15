@@ -946,6 +946,16 @@ class MeanReversionEngine:
         # Load economic calendar
         self.calendar.load_today()
 
+        # Check if today is a valid trading day (not weekend / holiday)
+        if not self._is_trading_day():
+            today = date.today()
+            if today.weekday() >= 5:
+                reason = "Weekend (market closed)"
+            else:
+                reason = "US market holiday"
+            log.info(f"Not a trading day: {reason} — engine will not trade today", "ENGINE")
+            # Dashboard trading window indicator already shows MARKET CLOSED
+
         # Check for full-day blackout
         is_blackout, event = self.calendar.is_blackout()
         if is_blackout and "Day" in event:
@@ -1008,6 +1018,7 @@ class MeanReversionEngine:
             "vix": self.api._vix_cache["value"],
             "session_start": Config.SESSION_START.isoformat(),
             "session_end": Config.SESSION_END.isoformat(),
+            "is_trading_day": self._is_trading_day(),
             "economic_events": self.calendar.get_events(),
             "last_bars": self._get_last_bars_summary(),
         }
@@ -1585,7 +1596,22 @@ class MeanReversionEngine:
         opt_type = "C" if signal == Signal.LONG else "P"
         return f"$SPX.X {today}{opt_type}{strike:05d}"
 
+    @staticmethod
+    def _is_trading_day() -> bool:
+        """Return True only on regular market days (Mon-Fri, non-holiday)."""
+        today = date.today()
+        # Weekend check (5 = Saturday, 6 = Sunday)
+        if today.weekday() >= 5:
+            return False
+        # US market holiday check
+        if today in Config.MARKET_HOLIDAYS:
+            return False
+        return True
+
     def _in_session(self) -> bool:
+        """Return True only during the trading window on a valid trading day."""
+        if not self._is_trading_day():
+            return False
         now = datetime.now().time()
         return Config.SESSION_START <= now <= Config.SESSION_END
 
