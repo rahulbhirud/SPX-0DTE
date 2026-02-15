@@ -1,1 +1,10 @@
 trading_engine.log
+trading_engine.log
+trading_engine.log
+
+# python
+__pycache__/
+*.pyc
+
+# logs
+*.log
