@@ -508,3 +508,22 @@ Account: $1,098,303.00
 2026-02-15 14:56:34 | INFO    | [ENGINE] All threads started — engine is LIVE
 2026-02-15 14:56:34 | INFO    | [STREAM] Bar stream connected
 2026-02-15 14:56:34 | INFO    | [STREAM] Order stream connected
+2026-02-15 14:58:02 | INFO    | [ENGINE] Keyboard interrupt — shutting down
+2026-02-15 14:58:02 | INFO    | [ENGINE] Engine stop requested
+2026-02-15 14:58:05 | INFO    | [DASHBOARD] Dashboard running at http://localhost:5000
+2026-02-15 14:58:05 | INFO    | [ENGINE] ═══ SPX 0DTE Mean Reversion Engine Starting ═══
+2026-02-15 14:58:05 | INFO    | [ENGINE] Environment: SIM
+2026-02-15 14:58:05 | INFO    | [ENGINE] Account: SIM3170696M
+2026-02-15 14:58:05 | INFO    | [AUTH] Token refreshed successfully
+2026-02-15 14:58:05 | INFO    | [ENGINE] Account balance: $1,098,303.00
+2026-02-15 14:58:05 | INFO    | [DATA] Loading historical 5-min bars...
+2026-02-15 14:58:05 | INFO    | [DATA] Loaded 100 bars, indicators computed
+2026-02-15 14:58:05 | INFO    | [STREAM] Opening bar stream for $SPX.X (5min)
+2026-02-15 14:58:05 | INFO    | [ENGINE] Started thread: BarStream
+2026-02-15 14:58:05 | INFO    | [STREAM] Opening order stream
+2026-02-15 14:58:05 | INFO    | [ENGINE] Started thread: OrderStream
+2026-02-15 14:58:05 | INFO    | [ENGINE] Started thread: PosMon
+2026-02-15 14:58:05 | INFO    | [ENGINE] Started thread: Heartbeat
+2026-02-15 14:58:05 | INFO    | [ENGINE] All threads started — engine is LIVE
+2026-02-15 14:58:05 | INFO    | [STREAM] Bar stream connected
+2026-02-15 14:58:05 | INFO    | [STREAM] Order stream connected
