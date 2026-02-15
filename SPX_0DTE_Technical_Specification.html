@@ -1,0 +1,821 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SPX 0DTE Mean Reversion Trading System — Technical Specification</title>
+<style>
+:root {
+  --bg: #f4f6fb;
+  --text: #1b1f2b;
+  --muted: #5f6783;
+  --accent: #2a4b9b;
+  --indicator: #2b6cb0;
+  --entry: #2f855a;
+  --exit: #c53030;
+  --risk: #b7791f;
+  --regime: #805ad5;
+  --card-bg: #ffffff;
+  --border: #d8deed;
+  --table-strip: #eef2ff;
+  --code-bg: #1f2333;
+  --code-text: #f5f7ff;
+  font-family: "Segoe UI", "Inter", -apple-system, BlinkMacSystemFont, sans-serif;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.6;
+}
+.layout {
+  display: flex;
+  min-height: 100vh;
+}
+.sidebar {
+  width: 270px;
+  background: #0f1729;
+  color: #f8f9ff;
+  padding: 28px 24px;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow-y: auto;
+}
+.sidebar h1 {
+  font-size: 18px;
+  font-weight: 600;
+  margin-bottom: 12px;
+}
+.sidebar p {
+  font-size: 13px;
+  color: #9aa4c8;
+  margin-bottom: 18px;
+}
+.nav-list {
+  list-style: none;
+  display: grid;
+  gap: 10px;
+}
+.nav-list a {
+  color: #f1f4ff;
+  text-decoration: none;
+  font-size: 14px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  transition: background 0.2s ease;
+}
+.nav-list a:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+main {
+  flex: 1;
+  padding: 32px 44px 60px 44px;
+}
+.doc-header {
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 24px;
+  margin-bottom: 28px;
+  display: grid;
+  gap: 18px;
+}
+.meta-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 14px;
+}
+.meta-item {
+  background: #f8f9ff;
+  border-radius: 8px;
+  padding: 12px 14px;
+  border: 1px solid #e3e8fb;
+}
+.meta-item span {
+  display: block;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--muted);
+}
+.meta-item strong {
+  font-size: 15px;
+}
+section {
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 26px 28px;
+  margin-bottom: 28px;
+  position: relative;
+  overflow: hidden;
+}
+section h2 {
+  font-size: 22px;
+  margin-bottom: 16px;
+}
+section h3 {
+  font-size: 18px;
+  margin: 18px 0 10px 0;
+}
+section h4 {
+  font-size: 16px;
+  margin: 16px 0 8px 0;
+}
+.doc-section::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 6px;
+}
+.section-indicators::before { background: var(--indicator); }
+.section-entry::before { background: var(--entry); }
+.section-exit::before { background: var(--exit); }
+.section-risk::before { background: var(--risk); }
+.section-regime::before { background: var(--regime); }
+.lead {
+  margin-bottom: 16px;
+  color: var(--muted);
+}
+ul, ol {
+  margin-left: 20px;
+}
+ul li { margin-bottom: 8px; }
+.table-wrap {
+  overflow-x: auto;
+  margin-top: 12px;
+}
+table {
+  width: 100%;
+  border-collapse: collapse;
+  border: 1px solid var(--border);
+}
+th, td {
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  font-size: 14px;
+}
+th {
+  background: #ebeffd;
+  font-weight: 600;
+}
+tbody tr:nth-child(even) {
+  background: var(--table-strip);
+}
+code {
+  background: rgba(31, 35, 51, 0.92);
+  color: var(--code-text);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-family: "JetBrains Mono", "Fira Code", monospace;
+  font-size: 13px;
+}
+pre {
+  background: #111628;
+  color: #f5f7ff;
+  padding: 18px;
+  border-radius: 10px;
+  margin: 16px 0;
+  font-family: "JetBrains Mono", "Fira Code", monospace;
+  overflow-x: auto;
+  font-size: 13px;
+}
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #eef2ff;
+  color: var(--accent);
+  padding: 4px 10px;
+  border-radius: 999px;
+  text-transform: uppercase;
+  font-size: 11px;
+  letter-spacing: 0.7px;
+  font-weight: 600;
+}
+.callout {
+  border-left: 4px solid var(--accent);
+  background: #edf1ff;
+  padding: 12px 16px;
+  border-radius: 8px;
+  margin: 14px 0;
+  font-size: 14px;
+}
+.highlight {
+  background: rgba(43, 108, 176, 0.1);
+  padding: 10px 12px;
+  border-radius: 8px;
+  margin: 12px 0;
+}
+.grid-two {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 18px;
+}
+.tag-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+.tag {
+  background: #ebf4ff;
+  color: var(--indicator);
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 12px;
+}
+.kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px;
+  margin: 18px 0;
+}
+.kpi {
+  background: #f8f9ff;
+  border-radius: 10px;
+  padding: 16px;
+  border: 1px solid #e3e8fb;
+}
+.kpi span {
+  display: block;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  margin-bottom: 6px;
+  color: var(--muted);
+}
+.kpi strong {
+  font-size: 20px;
+}
+.flowchart {
+  background: #10172a;
+  color: #f8faff;
+  border: 1px solid #24304d;
+}
+.flowchart .caption {
+  font-size: 13px;
+  color: #a9b5d8;
+  margin-bottom: 6px;
+}
+.example-table {
+  width: auto;
+  min-width: 420px;
+}
+.example-table th, .example-table td {
+  white-space: nowrap;
+}
+@media (max-width: 960px) {
+  .layout {
+    flex-direction: column;
+  }
+  .sidebar {
+    position: relative;
+    width: 100%;
+    height: auto;
+    border-bottom: 1px solid #1f2842;
+  }
+  main {
+    padding: 24px 18px 60px 18px;
+  }
+}
+</style>
+</head>
+<body>
+<div class="layout">
+  <aside class="sidebar">
+    <h1>SPX 0DTE Spec</h1>
+    <p>Authoritative technical reference for the SPX 0DTE Mean Reversion Trading System.</p>
+    <nav>
+      <ul class="nav-list">
+        <li><a href="#overview">System Overview</a></li>
+        <li><a href="#indicators">Technical Indicators</a></li>
+        <li><a href="#regime">Regime Classification</a></li>
+        <li><a href="#entry">Entry Signal Logic</a></li>
+        <li><a href="#options">Option Selection & Execution</a></li>
+        <li><a href="#sizing">Position Sizing</a></li>
+        <li><a href="#exit">Exit Logic</a></li>
+        <li><a href="#risk">Risk Limits</a></li>
+        <li><a href="#calendar">Economic Filters</a></li>
+        <li><a href="#lifecycle">Trade Lifecycle</a></li>
+        <li><a href="#parameters">Configuration Parameters</a></li>
+        <li><a href="#code-map">Code Reference</a></li>
+      </ul>
+    </nav>
+  </aside>
+  <main>
+    <header class="doc-header" id="metadata">
+      <div>
+        <span class="badge">Production Spec</span>
+        <h2>SPX 0DTE Mean Reversion Trading System</h2>
+        <p class="lead">Comprehensive, single-source technical specification capturing architecture, indicator math, signal criteria, and operational guardrails for AI-assisted development.</p>
+      </div>
+      <div class="meta-grid">
+        <div class="meta-item">
+          <span>Version</span>
+          <strong>3.0 (AI Reference)</strong>
+        </div>
+        <div class="meta-item">
+          <span>Last Updated</span>
+          <strong>2026-02-15</strong>
+        </div>
+        <div class="meta-item">
+          <span>Strategy Classification</span>
+          <strong>Intraday Mean Reversion (SPX 0DTE Options)</strong>
+        </div>
+        <div class="meta-item">
+          <span>Primary Timeframe</span>
+          <strong>5-minute bars (RTH)</strong>
+        </div>
+      </div>
+    </header>
+
+    <section id="overview" class="doc-section">
+      <h2>System Overview</h2>
+      <p class="lead">Fully automated intraday mean reversion strategy targeting SPX 0DTE index options. Operates between 09:45 and 15:30 ET with strict session, risk, and economic controls.</p>
+      <div class="kpi-grid">
+        <div class="kpi"><span>Instrument</span><strong>$SPX 0DTE (Index)</strong></div>
+        <div class="kpi"><span>Data Interval</span><strong>5-minute OHLCV</strong></div>
+        <div class="kpi"><span>Session (ET)</span><strong>09:45 → 15:30</strong></div>
+        <div class="kpi"><span>Entry Cutoff</span><strong>14:00</strong></div>
+      </div>
+      <h3>Architecture Flow</h3>
+      <pre class="flowchart">
++-------------------+      +----------------------+      +------------------+
+| TradeStation API  | ---> | Market Data Stream   | ---> | Indicator Engine |
+| 5-min SPX Bars    |      | (bars + quotes)      |      | (RSI/ADX/BB/VWAP) |
++-------------------+      +----------+-----------+      +---------+--------+
+                                       |                         |
+                                       v                         v
+                              +------------------+      +---------------------+
+                              | Regime Classifier| ---> | Signal Evaluator    |
+                              | (ADX + VIX)      |      | (Long/Short rules)  |
+                              +---------+--------+      +----------+----------+
+                                       |                         |
+                                       v                         v
+                               +---------------+        +----------------------+
+                               | Option Builder| -----> | Execution Controller |
+                               | (ATM symbol)  |        | (Entry + OCO orders) |
+                               +-------+-------+        +-----+----------------+
+                                       |                      |
+                                       v                      v
+                              +------------------+     +----------------------+
+                              | Position Monitor | <-- | Risk Manager         |
+                              | (15s cadence)    |     | (limits + cooldowns) |
+                              +------------------+     +----------------------+
+      </pre>
+      <div class="highlight">
+        <strong>Blackout Windows:</strong> No trading outside 09:45–15:30 ET, after 14:00 entry cutoff, during economic blackout events, or when risk limits trigger cooldowns.
+      </div>
+    </section>
+
+    <section id="indicators" class="doc-section section-indicators">
+      <h2>Technical Indicators</h2>
+      <p class="lead">All indicator calculations are executed inside <code>Indicators.compute()</code> in the bar-processing pipeline. Values are recomputed on each 5-minute update.</p>
+
+      <article>
+        <h3>Relative Strength Index (RSI — period 9)</h3>
+        <p><strong>Formula:</strong></p>
+        <p><code>RSI_t = 100 - \frac{100}{1 + RS_t}</code></p>
+        <p><code>RS_t = \frac{EMA_{gain}(9)}{EMA_{loss}(9)}</code> where gains and losses are computed from close-to-close deltas and smoothed with exponential moving averages.</p>
+        <h4>Calculation Steps</h4>
+        <ol>
+          <li>Compute <code>Δ_t = Close_t - Close_{t-1}</code>.</li>
+          <li>Separate positive deltas into <code>gain_t</code> and negative deltas into <code>loss_t = |Δ_t|</code>.</li>
+          <li>Apply exponential smoothing: <code>EMA_t = EMA_{t-1} + α (value_t - EMA_{t-1})</code> with <code>α = 2 / (n + 1)</code>.</li>
+          <li>Derive <code>RS_t</code> and map to RSI.</li>
+        </ol>
+        <h4>Example (sample closes)</h4>
+        <div class="table-wrap">
+          <table class="example-table">
+            <thead><tr><th>Bar</th><th>Close</th><th>Δ</th><th>Gain</th><th>Loss</th></tr></thead>
+            <tbody>
+              <tr><td>t-4</td><td>4998.00</td><td>-5.00</td><td>0.00</td><td>5.00</td></tr>
+              <tr><td>t-3</td><td>4996.50</td><td>-1.50</td><td>0.00</td><td>1.50</td></tr>
+              <tr><td>t-2</td><td>4999.70</td><td>+3.20</td><td>3.20</td><td>0.00</td></tr>
+              <tr><td>t-1</td><td>5003.40</td><td>+3.70</td><td>3.70</td><td>0.00</td></tr>
+              <tr><td>t</td><td>4997.50</td><td>-5.90</td><td>0.00</td><td>5.90</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p>Using <code>α = 0.2</code>, the smoothed gain ≈ 1.87, smoothed loss ≈ 2.96, yielding <code>RS ≈ 0.63</code> and <code>RSI ≈ 38.6</code>.</p>
+        <p><strong>Interpretation:</strong> RSI < 25 → oversold (long consideration). RSI > 75 → overbought (short consideration).</p>
+      </article>
+
+      <article>
+        <h3>Average Directional Index (ADX — period 14)</h3>
+        <p><strong>Formula Summary:</strong></p>
+        <p><code>TR_t = max(High_t - Low_t, |High_t - Close_{t-1}|, |Low_t - Close_{t-1}|)</code></p>
+        <p><code>+DM_t = max(High_t - High_{t-1}, 0)</code> when upward move exceeds downward move, else 0.</p>
+        <p><code>-DM_t = max(Low_{t-1} - Low_t, 0)</code> when downward move exceeds upward move, else 0.</p>
+        <p>Smoothed directional indexes:</p>
+        <p><code>+DI_t = 100 × \frac{EMA(+DM,14)}{EMA(TR,14)}</code>, <code>-DI_t = 100 × \frac{EMA(-DM,14)}{EMA(TR,14)}</code></p>
+        <p><code>DX_t = 100 × \frac{|+DI_t - -DI_t|}{+DI_t + -DI_t}</code>, <code>ADX_t = EMA(DX_t,14)</code></p>
+        <h4>Example Snapshot</h4>
+        <p>Given <code>TR = 22.5</code>, <code>EMA(+DM) = 4.1</code>, <code>EMA(-DM) = 3.8</code>:</p>
+        <p><code>+DI = 18.2</code>, <code>-DI = 16.9</code>, <code>DX = 3.7</code>. After smoothing, <code>ADX ≈ 21.4</code>.</p>
+        <p><strong>Interpretation:</strong> ADX < 25 → mean-reverting environment. ADX > 25 → trending; no entries.</p>
+      </article>
+
+      <article>
+        <h3>Bollinger Bands (period 20, σ = 2.0)</h3>
+        <p><strong>Formula:</strong></p>
+        <p><code>MB_t = SMA_{20}(Close)</code>, <code>σ_t = StdDev_{20}(Close)</code></p>
+        <p><code>Upper_t = MB_t + 2σ_t</code>, <code>Lower_t = MB_t - 2σ_t</code></p>
+        <h4>Example</h4>
+        <p>Given last 20 closes with <code>MB = 5002.15</code> and <code>σ = 6.40</code>:</p>
+        <p><code>Upper = 5014.95</code>, <code>Lower = 4989.35</code>. Long trigger when price < 4989.35; short trigger when price > 5014.95.</p>
+      </article>
+
+      <article>
+        <h3>Volume Weighted Average Price (VWAP — session reset)</h3>
+        <p><strong>Formula:</strong></p>
+        <p><code>VWAP_t = \frac{\sum_{i=1}^{t} Price_i × Volume_i}{\sum_{i=1}^{t} Volume_i}</code> for current trading day.</p>
+        <h4>Implementation Notes</h4>
+        <ul>
+          <li>Grouping key: date from <code>TimeStamp</code> (resets at session open).</li>
+          <li>Cumulative volume and value computed with pandas groupby cumulative sums.</li>
+          <li>Deviation measure: <code>VWAP_Dev = (Close - VWAP) / VWAP</code>.</li>
+        </ul>
+        <h4>Example</h4>
+        <p>Assume cumulative price-volume sum = 9,960,000 and cumulative volume = 2,000. VWAP = 4,980. A close at 4,965 yields deviation <code>-0.30%</code>, satisfying the long bias threshold (<code>&lt; -0.3%</code>).</p>
+      </article>
+
+      <article>
+        <h3>Volume Spike Analysis (20-period average)</h3>
+        <p><strong>Formula:</strong> <code>vol_avg_t = SMA_{20}(Volume)</code>. Trigger condition: <code>Volume_t ≥ 1.2 × vol_avg_t</code>.</p>
+        <h4>Example</h4>
+        <p>If <code>vol_avg = 18,500</code> contracts and current bar volume = 23,300, multiplier = 1.26 → volume condition satisfied.</p>
+      </article>
+
+      <article>
+        <h3>VIX Integration</h3>
+        <p>Fetched via TradeStation Market Data API (<code>/v3/marketdata/quotes/$VIX.X</code>) and cached for <code>Config.VIX_CACHE_SECONDS</code> (default 60 seconds).</p>
+        <h4>Regime Thresholds</h4>
+        <ul>
+          <li><strong>Trending boundary        "$BROWSER" SPX_0DTE_Technical_Specification.html        "$BROWSER" SPX_0DTE_Technical_Specification.html:</strong> VIX ≥ 30 → automatically classed TRENDING.</li>
+          <li><strong>Low volatility boundary:</strong> VIX ≤ 12 and ADX &lt; 20 → LOW_VOL regime.</li>
+          <li>Intermediate values default to MEAN_REVERTING.</li>
+        </ul>
+      </article>
+
+      <article>
+        <h3>Candlestick Reversal Detection</h3>
+        <p>Logic implemented in <code>Indicators.is_reversal_candle()</code> with evaluation of body, wicks, and engulfing properties.</p>
+        <div class="grid-two">
+          <div>
+            <h4>Bullish Patterns</h4>
+            <ul>
+              <li><strong>Hammer:</strong> Lower wick &gt; 2× body, minimal upper wick, body &lt; 35% of range.</li>
+              <li><strong>Bullish Engulfing:</strong> Current green candle body engulfs prior red body.</li>
+              <li><strong>Doji Confirmation:</strong> Prior doji followed by green close.</li>
+            </ul>
+          </div>
+          <div>
+            <h4>Bearish Patterns</h4>
+            <ul>
+              <li><strong>Shooting Star:</strong> Upper wick &gt; 2× body, minimal lower wick, body &lt; 35% of range.</li>
+              <li><strong>Bearish Engulfing:</strong> Current red body engulfs prior green body.</li>
+              <li><strong>Doji Confirmation:</strong> Prior doji followed by red close.</li>
+            </ul>
+          </div>
+        </div>
+        <p>Pattern detection is mandatory for entries (bullish for longs, bearish for shorts).</p>
+      </article>
+    </section>
+
+    <section id="regime" class="doc-section section-regime">
+      <h2>Regime Classification</h2>
+      <p class="lead">Combines ADX and VIX readings to categorize market state and adjust position sizing or trade eligibility.</p>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>Regime</th><th>Conditions</th><th>Impact on Trading</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>MEAN_REVERTING</strong></td>
+              <td>Default state when thresholds below are not breached.</td>
+              <td>Full signal evaluation; standard position sizing.</td>
+            </tr>
+            <tr>
+              <td><strong>LOW_VOL</strong></td>
+              <td>ADX &lt; 20 <em>and</em> VIX &lt; 12.</td>
+              <td>Entry allowed; position size halved to temper theta capture risk.</td>
+            </tr>
+            <tr>
+              <td><strong>TRENDING</strong></td>
+              <td>ADX ≥ 25 <strong>or</strong> VIX ≥ 30.</td>
+              <td>Entry logic bypassed; no new trades until regime shifts.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="callout">
+        Regime classification occurs on each bar update before evaluating entry criteria. Stored as <code>self.current_regime</code> and referenced by risk controls and sizing logic.
+      </div>
+    </section>
+
+    <section id="entry" class="doc-section section-entry">
+      <h2>Entry Signal Logic</h2>
+      <p class="lead">Entries require all gating conditions to be satisfied. Evaluated inside <code>_detect_signal()</code> upon each new bar.</p>
+      <h3>Long Entry Conditions (ALL must be true)</h3>
+      <ul>
+        <li>Price < Lower Bollinger Band.</li>
+        <li>VWAP deviation ≤ -0.3% (<code>Config.VWAP_OFFSET</code>).</li>
+        <li>RSI &lt; 25.</li>
+        <li>ADX &lt; 25.</li>
+        <li>Volume ≥ 1.2 × 20-bar average.</li>
+        <li>Bullish reversal candlestick detected.</li>
+        <li>Current regime ≠ TRENDING.</li>
+        <li>Within trading session (09:45 ≤ time ≤ 15:30) and before entry cutoff (time ≤ 14:00).</li>
+        <li>No economic blackout active.</li>
+        <li>Risk limits satisfied (daily loss, trade count, consecutive loss cooldown).</li>
+        <li>No open position.</li>
+      </ul>
+      <h3>Short Entry Conditions</h3>
+      <p>Mirror of long logic with polarity reversed:</p>
+      <ul>
+        <li>Price > Upper Bollinger Band.</li>
+        <li>VWAP deviation ≥ +0.3%.</li>
+        <li>RSI > 75.</li>
+        <li>ADX &lt; 25.</li>
+        <li>Volume spike criterion met.</li>
+        <li>Bearish reversal candlestick detected.</li>
+        <li>Regime ≠ TRENDING.</li>
+        <li>Session, cutoff, economic, and risk guardrails identical to long setup.</li>
+      </ul>
+      <h3>Entry Decision Flow</h3>
+      <pre class="flowchart">
++-------------------+
+| New 5-min bar     |
++---------+---------+
+          |
+          v
++-------------------+
+| Session / Cutoff? |
++----+--------------+
+     | yes
+     v
++-------------------+
+| Economic blackout?|
++----+--------------+
+     | no
+     v
++-------------------+
+| Risk limits ok?   |
++----+--------------+
+     | yes
+     v
++-------------------+
+| Regime == TRENDING?
++----+--------------+
+     | no
+     v
++-------------------+
+| Indicator tests   |
+| (BB/RSI/ADX/VWAP/ |
+|  Volume/Pattern)  |
++----+--------------+
+     | all pass
+     v
++-------------------+
+| Signal emitted    |
+| (LONG / SHORT)    |
++-------------------+
+      </pre>
+    </section>
+
+    <section id="options" class="doc-section">
+      <h2>Option Selection & Execution</h2>
+      <h3>Symbol Format</h3>
+      <p><code>$SPX.X YYMMDDCnnnnn</code> for calls, <code>$SPX.X YYMMDDPnnnnn</code> for puts, where strike is nearest integer to spot.</p>
+      <h3>Selection Logic</h3>
+      <ul>
+        <li>Use current SPX index level to round to nearest whole-number strike.</li>
+        <li>Call selected for LONG, put selected for SHORT.</li>
+        <li>Trade date derived from current session (same-day expiry 0DTE).</li>
+      </ul>
+      <h3>Order Placement</h3>
+      <ul>
+        <li>Fetch option quote; skip if bid/ask ≤ 0 or spread > $1.50 (<code>Config.MAX_SPREAD</code>).</li>
+        <li>Entry order: limit at <code>ask + $0.05</code> (implemented as mid-price rounding with buffer).</li>
+        <li>Simultaneously submit OCO bracket for stop-loss and take-profit.</li>
+      </ul>
+      <div class="callout">
+        If regime == LOW_VOL, position size is halved before order submission.
+      </div>
+    </section>
+
+    <section id="sizing" class="doc-section">
+      <h2>Position Sizing</h2>
+      <p><strong>Formula:</strong></p>
+      <p><code>quantity = \left\lfloor \frac{account\_equity × max\_position\_pct}{option\_premium × risk\_per\_trade × 100} \right\rfloor</code></p>
+      <ul>
+        <li><strong>Max position percent:</strong> 2% of account equity.</li>
+        <li><strong>Risk per trade:</strong> 33% of option premium (option risk in dollars = premium × 0.33 × 100).</li>
+        <li><strong>Regime adjustment:</strong> LOW_VOL regime halves the computed quantity (minimum 1 contract).</li>
+      </ul>
+      <h3>Example Calculation</h3>
+      <p>Account equity = $250,000; option premium (mid) = $8.40.</p>
+      <ul>
+        <li>Max dollar risk = 250,000 × 0.02 = $5,000.</li>
+        <li>Risk per contract = 8.40 × 0.33 × 100 = $277.20.</li>
+        <li>Contracts = floor(5,000 / 277.20) = 18.</li>
+        <li>LOW_VOL regime → quantity = floor(18 / 2) = 9.</li>
+      </ul>
+    </section>
+
+    <section id="exit" class="doc-section section-exit">
+      <h2>Exit Logic & Risk Management</h2>
+      <p class="lead">Executed via OCO brackets plus continuous monitoring in <code>_check_position()</code> and <code>_force_close()</code>.</p>
+      <h3>Bracket Structure</h3>
+      <ul>
+        <li><strong>Stop Loss:</strong> Entry premium − 33% of entry premium.</li>
+        <li><strong>Take Profit:</strong> Entry premium + 2 × risk amount (2:1 reward to risk).</li>
+        <li><strong>Breakeven Trail:</strong> When unrealized profit ≥ risk (1R), stop adjusted to entry.</li>
+      </ul>
+      <h3>Time-Based Exits</h3>
+      <ul>
+        <li><strong>Time Stop:</strong> Close after 25 minutes if still open.</li>
+        <li><strong>End-of-Day:</strong> Force close all positions at 15:25 ET.</li>
+      </ul>
+      <h3>Forced Closure Routine</h3>
+      <p>When triggered, cancel outstanding OCO orders, place market close order, compute realized P/L, and record trade.</p>
+    </section>
+
+    <section id="risk" class="doc-section section-risk">
+      <h2>Risk Limits & Circuit Breakers</h2>
+      <ul>
+        <li><strong>Max daily loss:</strong> -3% of account equity halts trading for remainder of session.</li>
+        <li><strong>Max trades per day:</strong> 8 (tracked via <code>self.trades_today</code>).</li>
+        <li><strong>Consecutive loss limit:</strong> 3 losses triggers 30-minute cooldown (<code>Config.COOLDOWN_AFTER_LOSS</code>).</li>
+        <li><strong>Cooldown handling:</strong> Engine stores <code>self.cooldown_until</code>; no entries allowed until expiry.</li>
+        <li><strong>Spread guardrail:</strong> Skip any option with bid-ask spread > $1.50.</li>
+      </ul>
+      <div class="callout">
+        Risk checks execute before option orders and within <code>_within_limits()</code>. Daily P/L tracked via <code>self.daily_pnl</code> and updated in <code>_record_trade()</code>.</div>
+    </section>
+
+    <section id="calendar" class="doc-section">
+      <h2>Economic Calendar Filtering</h2>
+      <p class="lead">Engine skips trading during high-impact economic events using <code>EconomicCalendar</code> module.</p>
+      <h3>Event Impact Classes</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Impact</th><th>Examples</th><th>Blackout Window</th></tr></thead>
+          <tbody>
+            <tr><td>CRITICAL</td><td>FOMC Decision, Triple Witching</td><td>All-day blackout (>= 999 minutes)</td></tr>
+            <tr><td>HIGH</td><td>CPI Release, Non-Farm Payrolls</td><td>10 minutes before to 60 minutes after</td></tr>
+            <tr><td>MEDIUM</td><td>PPI Release</td><td>10 minutes before to 30 minutes after</td></tr>
+            <tr><td>LOW</td><td>Weekly Jobless Claims</td><td>10 minutes before to 15 minutes after</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <h3>Blackout Evaluation</h3>
+      <ol>
+        <li>At session start, <code>load_today()</code> populates daily events (API + fallbacks).</li>
+        <li>Each bar checks <code>is_blackout()</code> with current time.</li>
+        <li>Any active blackout halts signal evaluation and logs alert.</li>
+      </ol>
+      <h4>Example</h4>
+      <p>On FOMC days, <code>EconomicCalendar</code> injects a CRITICAL event, forcing no-trade state for entire day. CPI release at 08:30 adds blackout from 08:20 to 09:30 ET, ensuring session start at 09:45 remains clear.</p>
+    </section>
+
+    <section id="lifecycle" class="doc-section">
+      <h2>Complete Trade Lifecycle</h2>
+      <pre class="flowchart">
+[Start Session 09:45]
+        |
+        v
+[Load historical bars]
+        |
+        v
+[Compute indicators]
+(RSI, ADX, BB, VWAP, Volume)
+        |
+        v
+[Fetch VIX + classify regime]
+        |
+        v
+[New 5-min bar arrives]
+        |
+        v
+[Check session window]
+        |
+        v
+[Evaluate economic blackout]
+        |
+        v
+[Risk controls satisfied?]
+        |
+        v
+[Entry logic (12 conditions)]
+        |
+        v
+[Signal?] -- no --> [Wait next bar]
+        |
+       yes
+        v
+[Build ATM option symbol]
+        |
+        v
+[Fetch option quote / spread check]
+        |
+        v
+[Size position (regime-adjusted)]
+        |
+        v
+[Submit entry + OCO orders]
+        |
+        v
+[Monitor every 15 seconds]
+  |           |           |           |
+  v           v           v           v
+[Time stop] [Breakeven] [TP hit]   [SL hit]
+  |           |           |           |
+  +-----------+-----------+-----------+
+              |
+              v
+     [Force close / record trade]
+              |
+              v
+      [Update P/L + risk state]
+              |
+              v
+[Check daily limits / cooldown]
+              |
+            [End Session 15:30]
+              |
+              v
+         [EOD summary alert]
+      </pre>
+    </section>
+
+    <section id="parameters" class="doc-section">
+      <h2>Configuration Parameters</h2>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>Parameter</th><th>Value</th><th>Type</th><th>Description</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>RSI_PERIOD</td><td>9</td><td>int</td><td>RSI lookback length.</td></tr>
+            <tr><td>RSI_OVERSOLD</td><td>25</td><td>float</td><td>Oversold threshold for long entries.</td></tr>
+            <tr><td>RSI_OVERBOUGHT</td><td>75</td><td>float</td><td>Overbought threshold for short entries.</td></tr>
+            <tr><td>ADX_PERIOD</td><td>14</td><td>int</td><td>ADX smoothing length.</td></tr>
+            <tr><td>ADX_THRESHOLD</td><td>25</td><td>float</td><td>Mean-reversion boundary; above implies trending.</td></tr>
+            <tr><td>BB_PERIOD</td><td>20</td><td>int</td><td>Bollinger Band moving average length.</td></tr>
+            <tr><td>BB_STD</td><td>2.0</td><td>float</td><td>Standard deviation multiplier.</td></tr>
+            <tr><td>VWAP_OFFSET</td><td>0.003</td><td>float</td><td>Minimum VWAP deviation (0.3%).</td></tr>
+            <tr><td>VOL_MULTIPLIER</td><td>1.2</td><td>float</td><td>Volume spike threshold.</td></tr>
+            <tr><td>MAX_POSITION_PCT</td><td>0.02</td><td>float</td><td>Max position sizing percentage of equity.</td></tr>
+            <tr><td>RISK_PER_TRADE</td><td>0.33</td><td>float</td><td>Risk allocation per trade (option premium fraction).</td></tr>
+            <tr><td>RR_RATIO</td><td>2.0</td><td>float</td><td>Risk-to-reward ratio for take-profit.</td></tr>
+            <tr><td>TIME_STOP_MIN</td><td>25</td><td>int</td><td>Maximum trade duration in minutes.</td></tr>
+            <tr><td>MAX_DAILY_LOSS_PCT</td><td>0.03</td><td>float</td><td>Daily drawdown cap.</td></tr>
+            <tr><td>MAX_TRADES_PER_DAY</td><td>8</td><td>int</td><td>Daily trade limit.</td></tr>
+            <tr><td>MAX_CONSECUTIVE_LOSS</td><td>3</td><td>int</td><td>Loss streak before cooldown.</td></tr>
+            <tr><td>SESSION_START</td><td>09:45:00</td><td>time</td><td>Trading session start.</td></tr>
+            <tr><td>SESSION_END</td><td>15:30:00</td><td>time</td><td>Trading session end.</td></tr>
+            <tr><td>NO_ENTRY_AFTER</td><td>14:00:00</td><td>time</td><td>Latest entry time.</td></tr>
+            <tr><td>EOD_CLOSE_TIME</td><td>15:25:00</td><td>time</td><td>Forced exit time.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="code-map" class="doc-section">
+      <h2>Code Reference Mapping</h2>
+      <p class="lead">Quick mapping from specification components to implementation hotspots.</p>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>Component</th><th>File</th><th>Class / Function</th><th>Line Range (approx)</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>RSI / VWAP / Bollinger / Volume</td><td>spx_0dte_engine.py</td><td>Indicators.compute()</td><td>689–762</td></tr>
+            <tr><td>ADX Calculation</td><td>spx_0dte_engine.py</td><td>Indicators._calc_adx()</td><td>734–777</td></tr>
+            <tr><td>Candlestick Reversal Logic</td><td>spx_0dte_engine.py</td><td>Indicators.is_reversal_candle()</td><td>783–833</td></tr>
+            <tr><td>Regime Enumeration</td><td>spx_0dte_engine.py</td><td>Regime Enum</td><td>839–846</td></tr>
+            <tr><td>Economic Calendar</td><td>spx_0dte_engine.py</td><td>EconomicCalendar</td><td>260–422</td></tr>
+            <tr><td>Regime Classification Logic</td><td>spx_0dte_engine.py</td><td>MeanReversionEngine._classify_regime()</td><td>1574–1583</td></tr>
+            <tr><td>Signal Detection</td><td>spx_0dte_engine.py</td><td>_detect_signal()</td><td>1269–1302</td></tr>
+            <tr><td>Entry Execution + OCO</td><td>spx_0dte_engine.py</td><td>_execute_entry()</td><td>1304–1415</td></tr>
+            <tr><td>Position Monitoring</td><td>spx_0dte_engine.py</td><td>_check_position()</td><td>1409–1473</td></tr>
+            <tr><td>Risk Gatekeeping</td><td>spx_0dte_engine.py</td><td>_within_limits()</td><td>1587–1614</td></tr>
+            <tr><td>Forced Closures</td><td>spx_0dte_engine.py</td><td>_force_close()</td><td>1476–1511</td></tr>
+            <tr><td>Trade Recording & P/L</td><td>spx_0dte_engine.py</td><td>_record_trade()</td><td>1616–1651</td></tr>
+            <tr><td>Configuration Defaults</td><td>config.py</td><td>Config class</td><td>27–142</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+</div>
+</body>
+</html>

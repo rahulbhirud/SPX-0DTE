@@ -5,3 +5,4 @@ numpy>=1.24.0
 python-dotenv>=1.0.0
 flask>=3.0.0
 flask-cors>=4.0.0
+
