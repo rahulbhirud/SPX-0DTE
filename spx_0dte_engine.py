@@ -732,11 +732,30 @@ class Indicators:
         df["bb_upper"] = df["bb_mid"] + config.BB_STD * bb_std
         df["bb_lower"] = df["bb_mid"] - config.BB_STD * bb_std
 
-        # RSI
+        # RSI — Wilder's smoothing (matches TradingView exactly)
+        # TradingView uses RMA (alpha=1/period), NOT EMA (alpha=2/(period+1))
+        # Seed with SMA of first `period` values, then apply Wilder's smoothing
         delta = df["close"].diff()
-        gain  = delta.clip(lower=0).ewm(span=config.RSI_PERIOD, adjust=False).mean()
-        loss  = (-delta.clip(upper=0)).ewm(span=config.RSI_PERIOD, adjust=False).mean()
-        rs    = gain / loss.replace(0, 1e-10)
+        gains = delta.clip(lower=0)
+        losses = (-delta.clip(upper=0))
+        period = config.RSI_PERIOD
+
+        avg_gain = np.full(len(df), np.nan)
+        avg_loss = np.full(len(df), np.nan)
+
+        # Seed: SMA of first `period` changes (index 1..period)
+        if len(df) > period:
+            avg_gain[period] = gains.iloc[1:period + 1].mean()
+            avg_loss[period] = losses.iloc[1:period + 1].mean()
+
+            # Wilder's smoothing: avg = (prev_avg * (period-1) + current) / period
+            for i in range(period + 1, len(df)):
+                avg_gain[i] = (avg_gain[i - 1] * (period - 1) + gains.iloc[i]) / period
+                avg_loss[i] = (avg_loss[i - 1] * (period - 1) + losses.iloc[i]) / period
+
+        avg_gain = pd.Series(avg_gain, index=df.index)
+        avg_loss = pd.Series(avg_loss, index=df.index)
+        rs = avg_gain / avg_loss.replace(0, 1e-10)
         df["rsi"] = 100 - (100 / (1 + rs))
 
         # ADX

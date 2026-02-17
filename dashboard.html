@@ -1007,8 +1007,8 @@ async function updateDecisionLog() {
         <div class="dl-header">
           <span class="dl-time">${time}</span>
           <span class="dl-side ${sideClass}">Closest: ${d.best_side}</span>
-          <span class="dl-score" style="color:${scoreColor}">${d.conditions_met}/${d.conditions_total}</span>
-          ${d.skip_reason ? `<span class="dl-gate">\u26D4 ${d.skip_reason}</span>` : '<span style="color:var(--green);font-size:11px;font-family:var(--mono);font-weight:700">\u2705 ALL GATES PASSED</span>'}
+          <span class="dl-score" style="color:${scoreColor}">Signal: ${d.conditions_met}/${d.conditions_total}</span>
+          ${d.skip_reason ? `<span class="dl-gate">\u26D4 ${d.skip_reason}</span>` : d.conditions_met >= d.conditions_total ? '<span style="color:var(--green);font-size:11px;font-family:var(--mono);font-weight:700">\u2705 ALL CONDITIONS MET \u2014 TRADE TRIGGERED</span>' : `<span style="color:var(--blue);font-size:11px;font-family:var(--mono);font-weight:700">\uD83D\uDD13 Gates clear \u2014 waiting for ${d.conditions_total - d.conditions_met} more signal condition${(d.conditions_total - d.conditions_met) !== 1 ? 's' : ''}</span>`}
         </div>
         <div class="dl-indicators">
           <span class="dl-ind">SPX <span class="dl-ind-val">$${d.close}</span></span>
