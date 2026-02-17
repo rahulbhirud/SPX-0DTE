@@ -693,13 +693,19 @@ class Indicators:
         # Normalize column names from TradeStation format
         rename_map = {"Open": "open", "High": "high", "Low": "low",
                       "Close": "close", "TotalVolume": "volume"}
+        # Only rename columns that are actually present (avoid duplicates
+        # when compute() is called repeatedly on already-renamed data)
+        rename_map = {k: v for k, v in rename_map.items() if k in df.columns}
         df = df.rename(columns=rename_map)
+        # Drop any duplicate columns that may have crept in
+        df = df.loc[:, ~df.columns.duplicated()]
 
         if len(df) < config.BB_PERIOD + 5:
             return df
 
         # VWAP (cumulative per trading day — resets each session)
         if "TimeStamp" in df.columns:
+            df["TimeStamp"] = pd.to_datetime(df["TimeStamp"], errors="coerce")
             day_groups = df["TimeStamp"].dt.date
         else:
             day_groups = pd.Series(0, index=df.index)  # Single group fallback
@@ -1214,10 +1220,23 @@ class MeanReversionEngine:
             # Append new bar to DataFrame
             new_row = pd.DataFrame([bar])
             for col in ["High", "Low", "Open", "Close"]:
-                new_row[col] = pd.to_numeric(new_row[col], errors="coerce")
-            new_row["TotalVolume"] = pd.to_numeric(
-                new_row["TotalVolume"], errors="coerce"
-            ).fillna(0).astype(int)
+                if col in new_row.columns:
+                    new_row[col] = pd.to_numeric(new_row[col], errors="coerce")
+            if "TotalVolume" in new_row.columns:
+                new_row["TotalVolume"] = pd.to_numeric(
+                    new_row["TotalVolume"], errors="coerce"
+                ).fillna(0).astype(int)
+            if "TimeStamp" in new_row.columns:
+                new_row["TimeStamp"] = pd.to_datetime(new_row["TimeStamp"])
+
+            # Normalize column names to match bars_df (already lowercase after
+            # the initial Indicators.compute() call). Without this, concat
+            # creates duplicate columns (e.g. both "Close" and "close") and
+            # the new bar's values are lost during deduplication.
+            col_map = {"Open": "open", "High": "high", "Low": "low",
+                       "Close": "close", "TotalVolume": "volume"}
+            new_row = new_row.rename(columns={k: v for k, v in col_map.items()
+                                              if k in new_row.columns})
 
             self.bars_df = pd.concat(
                 [self.bars_df, new_row], ignore_index=True
