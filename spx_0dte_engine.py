@@ -750,7 +750,8 @@ class Indicators:
     @staticmethod
     def _calc_adx(df: pd.DataFrame, period: int) -> pd.Series:
         """
-        Calculate Average Directional Index (ADX).
+        Calculate Average Directional Index (ADX) using Wilder's smoothing.
+        Matches TradingView's ADX(14) exactly.
         ADX < 25 = non-trending (mean reverting)
         ADX > 25 = trending (avoid)
         """
@@ -774,14 +775,14 @@ class Indicators:
         plus_dm  = pd.Series(plus_dm, index=df.index)
         minus_dm = pd.Series(minus_dm, index=df.index)
 
-        # Smoothed with EWM
-        atr       = tr.ewm(span=period, adjust=False).mean()
-        plus_di   = 100 * (plus_dm.ewm(span=period, adjust=False).mean() / atr.replace(0, 1e-10))
-        minus_di  = 100 * (minus_dm.ewm(span=period, adjust=False).mean() / atr.replace(0, 1e-10))
+        # Wilder's smoothing: alpha = 1/period (NOT ewm span which uses 2/(period+1))
+        atr       = tr.ewm(alpha=1/period, adjust=False).mean()
+        plus_di   = 100 * (plus_dm.ewm(alpha=1/period, adjust=False).mean() / atr.replace(0, 1e-10))
+        minus_di  = 100 * (minus_dm.ewm(alpha=1/period, adjust=False).mean() / atr.replace(0, 1e-10))
 
-        # DX and ADX
+        # DX and ADX (also Wilder-smoothed)
         dx  = 100 * ((plus_di - minus_di).abs() / (plus_di + minus_di).replace(0, 1e-10))
-        adx = dx.ewm(span=period, adjust=False).mean()
+        adx = dx.ewm(alpha=1/period, adjust=False).mean()
 
         return adx
 
