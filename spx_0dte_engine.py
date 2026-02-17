@@ -1232,12 +1232,19 @@ class MeanReversionEngine:
     # ── Core Signal Processing ───────────────────────────────
 
     def _on_new_bar(self, bar: dict):
-        """Called on every new 5-min bar from stream."""
+        """
+        Called on every streaming bar update from TradeStation.
+
+        IMPORTANT: TradeStation streams intra-bar tick updates (many per second),
+        NOT just completed bars. We must:
+        1. Update the current bar in-place when the timestamp matches
+        2. Only process signals when a NEW bar appears (previous bar completed)
+        """
         try:
             if not self._in_session():
                 return
 
-            # Append new bar to DataFrame
+            # Parse the incoming bar
             new_row = pd.DataFrame([bar])
             for col in ["High", "Low", "Open", "Close"]:
                 if col in new_row.columns:
@@ -1249,15 +1256,29 @@ class MeanReversionEngine:
             if "TimeStamp" in new_row.columns:
                 new_row["TimeStamp"] = pd.to_datetime(new_row["TimeStamp"])
 
-            # Normalize column names to match bars_df (already lowercase after
-            # the initial Indicators.compute() call). Without this, concat
-            # creates duplicate columns (e.g. both "Close" and "close") and
-            # the new bar's values are lost during deduplication.
+            # Normalize column names to lowercase
             col_map = {"Open": "open", "High": "high", "Low": "low",
                        "Close": "close", "TotalVolume": "volume"}
             new_row = new_row.rename(columns={k: v for k, v in col_map.items()
                                               if k in new_row.columns})
 
+            # Determine if this is a NEW bar or an update to the current bar
+            incoming_ts = new_row["TimeStamp"].iloc[0] if "TimeStamp" in new_row.columns else None
+            is_new_bar = True
+
+            if (self.bars_df is not None and not self.bars_df.empty
+                    and incoming_ts is not None and "TimeStamp" in self.bars_df.columns):
+                last_ts = self.bars_df["TimeStamp"].iloc[-1]
+                if pd.notna(last_ts) and pd.notna(incoming_ts) and incoming_ts == last_ts:
+                    # Same bar — update the last row in place
+                    is_new_bar = False
+                    for col in ["open", "high", "low", "close", "volume"]:
+                        if col in new_row.columns:
+                            self.bars_df.at[self.bars_df.index[-1], col] = new_row[col].iloc[0]
+                    # Don't recompute indicators or process signals on intra-bar ticks
+                    return
+
+            # NEW bar: previous bar is now complete — append and process
             self.bars_df = pd.concat(
                 [self.bars_df, new_row], ignore_index=True
             ).tail(200)
