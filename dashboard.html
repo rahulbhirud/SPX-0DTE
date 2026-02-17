@@ -100,11 +100,12 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);min-height:1
 .log-stream{padding:0}
 .log-entry{display:flex;gap:10px;padding:8px 14px;border-bottom:1px solid #12141e;font-size:11px;font-family:var(--mono);line-height:1.4}
 .log-entry:hover{background:var(--bg3)}
-.log-time{color:var(--text3);flex-shrink:0;width:70px}
+.log-time{color:var(--text3);flex-shrink:0;width:90px}
 .log-level{flex-shrink:0;width:55px;font-weight:600;text-transform:uppercase;font-size:10px}
 .log-level-info{color:var(--blue)}.log-level-trade{color:var(--green)}
 .log-level-warning{color:var(--yellow)}.log-level-error{color:var(--red)}
 .log-level-alert{color:var(--red);animation:blink 1.5s infinite}
+.log-level-decision{color:var(--purple)}
 .log-cat{color:var(--text3);flex-shrink:0;width:70px;font-size:10px}
 .log-msg{color:var(--text2);word-break:break-all;flex:1}
 
@@ -173,6 +174,31 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);min-height:1
 .dp-check-label{color:var(--text2);flex:1}
 .dp-check-val{color:var(--text3);font-size:10px;text-align:right}
 .dp-no-data{padding:40px;text-align:center;color:var(--text3);font-size:13px}
+
+/* Decision Log Timeline */
+.dl-timeline{padding:16px 18px;display:flex;flex-direction:column;gap:14px;max-height:500px;overflow-y:auto}
+.dl-entry{background:var(--bg3);border:1px solid var(--border);border-radius:10px;padding:14px 16px;transition:border-color 0.2s}
+.dl-entry:hover{border-color:var(--text3)}
+.dl-header{display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap}
+.dl-time{font-family:var(--mono);font-size:11px;color:var(--text3)}
+.dl-side{font-family:var(--mono);font-size:10px;font-weight:700;padding:3px 8px;border-radius:4px;text-transform:uppercase;letter-spacing:0.5px}
+.dl-side-long{background:var(--green-bg);color:var(--green)}
+.dl-side-short{background:var(--red-bg);color:var(--red)}
+.dl-score{font-family:var(--mono);font-size:12px;font-weight:700}
+.dl-gate{font-size:11px;color:var(--red);font-family:var(--mono);background:var(--red-bg);padding:3px 8px;border-radius:4px}
+.dl-indicators{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px}
+.dl-ind{font-family:var(--mono);font-size:10px;color:var(--text2);background:var(--bg);padding:3px 8px;border-radius:4px}
+.dl-ind-val{font-weight:600}
+.dl-checks{display:grid;grid-template-columns:1fr 1fr;gap:4px 12px}
+.dl-chk{display:flex;align-items:center;gap:6px;font-size:10px;font-family:var(--mono)}
+.dl-chk-icon{width:14px;height:14px;border-radius:3px;display:flex;align-items:center;justify-content:center;font-size:8px;flex-shrink:0}
+.dl-chk-pass{background:var(--green-bg);color:var(--green);border:1px solid var(--green)}
+.dl-chk-fail{background:var(--bg);color:var(--text3);border:1px solid var(--border)}
+.dl-chk-name{color:var(--text2);flex:1}
+.dl-chk-val{color:var(--text3);font-size:9px}
+.dl-tabs{display:flex;gap:4px}
+.dl-tab{font-size:10px;padding:2px 8px;border-radius:4px;cursor:pointer;font-family:var(--mono);font-weight:600;border:1px solid var(--border);background:var(--bg3);color:var(--text3);transition:all 0.15s}
+.dl-tab.active,.dl-tab:hover{border-color:var(--blue);color:var(--blue);background:var(--blue-bg)}
 
 /* Responsive — Tablet */
 @media(max-width:1200px){
@@ -438,6 +464,17 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);min-height:1
       </div>
     </div>
 
+    <!-- Decision Log — 5-min Summaries -->
+    <div class="panel panel-full">
+      <div class="panel-header">
+        <span class="panel-title">Decision Log — Why Not Trading (every 5 min)</span>
+        <span class="panel-tag" id="dlCount" style="background:var(--bg3);color:var(--text2)">0 entries</span>
+      </div>
+      <div class="dl-timeline" id="dlPanel">
+        <div class="dp-no-data">Waiting for first decision summary...</div>
+      </div>
+    </div>
+
     <!-- Panels Grid -->
     <div class="panels">
 
@@ -494,6 +531,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);min-height:1
           <span class="panel-title">Live Log Stream</span>
           <div style="display:flex;gap:6px">
             <button class="btn btn-outline" style="font-size:10px;padding:4px 10px" onclick="filterLogs('ALL')">All</button>
+            <button class="btn btn-outline" style="font-size:10px;padding:4px 10px" onclick="filterLogs('DECISION')">Decisions</button>
             <button class="btn btn-outline" style="font-size:10px;padding:4px 10px" onclick="filterLogs('TRADE')">Trades</button>
             <button class="btn btn-outline" style="font-size:10px;padding:4px 10px" onclick="filterLogs('ALERT')">Alerts</button>
             <button class="btn btn-outline" style="font-size:10px;padding:4px 10px" onclick="filterLogs('ERROR')">Errors</button>
@@ -933,6 +971,71 @@ function renderOpenTrade(trade) {
   `;
 }
 
+// ─── Decision Log (5-min summaries) ──────────────
+let dlViewSide = 'best'; // 'best', 'long', 'short'
+
+async function updateDecisionLog() {
+  const entries = await fetchJSON('decisions?limit=3');
+  if (!entries || entries.length === 0) return;
+
+  const panel = document.getElementById('dlPanel');
+  document.getElementById('dlCount').textContent = `${entries.length} entr${entries.length !== 1 ? 'ies' : 'y'}`;
+
+  panel.innerHTML = entries.slice().reverse().map(d => {
+    const time = d.timestamp ? d.timestamp.slice(11, 19) + ' ET' : '';
+    const sideClass = d.best_side === 'LONG' ? 'dl-side-long' : 'dl-side-short';
+    const scoreColor = d.conditions_met >= d.conditions_total ? 'var(--green)'
+      : d.conditions_met >= 4 ? 'var(--yellow)'
+      : d.conditions_met >= 2 ? 'var(--blue)' : 'var(--text3)';
+
+    // Choose which detail list to show
+    const longDetail = d.long_detail || [];
+    const shortDetail = d.short_detail || [];
+
+    function renderChecks(detail) {
+      return detail.map(c => {
+        const iconCls = c.pass ? 'dl-chk-pass' : 'dl-chk-fail';
+        const icon = c.pass ? '\u2713' : '\u2717';
+        return `<div class="dl-chk"><div class="dl-chk-icon ${iconCls}">${icon}</div><span class="dl-chk-name">${c.name}</span><span class="dl-chk-val">${c.value}</span></div>`;
+      }).join('');
+    }
+
+    const ind = d.indicators || {};
+
+    return `
+      <div class="dl-entry">
+        <div class="dl-header">
+          <span class="dl-time">${time}</span>
+          <span class="dl-side ${sideClass}">Closest: ${d.best_side}</span>
+          <span class="dl-score" style="color:${scoreColor}">${d.conditions_met}/${d.conditions_total}</span>
+          ${d.skip_reason ? `<span class="dl-gate">\u26D4 ${d.skip_reason}</span>` : '<span style="color:var(--green);font-size:11px;font-family:var(--mono);font-weight:700">\u2705 ALL GATES PASSED</span>'}
+        </div>
+        <div class="dl-indicators">
+          <span class="dl-ind">SPX <span class="dl-ind-val">$${d.close}</span></span>
+          <span class="dl-ind">RSI <span class="dl-ind-val">${ind.rsi}</span></span>
+          <span class="dl-ind">ADX <span class="dl-ind-val">${ind.adx}</span></span>
+          <span class="dl-ind">VIX <span class="dl-ind-val">${d.vix}</span></span>
+          <span class="dl-ind">VWAP <span class="dl-ind-val">${ind.vwap_dev_pct}%</span></span>
+          <span class="dl-ind">Vol <span class="dl-ind-val">${ind.vol_ratio}x</span></span>
+          <span class="dl-ind">${d.regime}</span>
+        </div>
+        <div style="display:flex;gap:8px;margin-bottom:8px">
+          <div style="flex:1">
+            <div style="font-size:9px;text-transform:uppercase;letter-spacing:1px;color:var(--green);font-weight:700;margin-bottom:4px">LONG ${d.long_score}</div>
+            <div class="dl-checks">${renderChecks(longDetail)}</div>
+          </div>
+          <div style="width:1px;background:var(--border)"></div>
+          <div style="flex:1">
+            <div style="font-size:9px;text-transform:uppercase;letter-spacing:1px;color:var(--red);font-weight:700;margin-bottom:4px">SHORT ${d.short_score}</div>
+            <div class="dl-checks">${renderChecks(shortDetail)}</div>
+          </div>
+        </div>
+        ${d.failing && d.failing.length > 0 ? `<div style="font-size:10px;font-family:var(--mono);color:var(--yellow);margin-top:4px">\u26A0 Missing (${d.best_side}): ${d.failing.join(', ')}</div>` : ''}
+      </div>
+    `;
+  }).join('');
+}
+
 // ─── Economic Events ─────────────────────────────
 function renderEconEvents(events) {
   const panel = document.getElementById('econPanel');
@@ -1027,7 +1130,7 @@ async function updateLogs() {
     : logs.filter(l => l.level === currentLogFilter || l.category === currentLogFilter);
 
   panel.innerHTML = filtered.slice().reverse().map(l => {
-    const time = l.timestamp ? l.timestamp.slice(11, 19) : '';
+    const time = l.timestamp ? l.timestamp.slice(11, 19) + ' ET' : '';
     const levelClass = `log-level-${l.level.toLowerCase()}`;
     return `
       <div class="log-entry">
@@ -1049,7 +1152,7 @@ async function updateLogs() {
       strip.className = 'alert-strip has-alert';
       document.getElementById('alertIcon').textContent = latest.level === 'ERROR' ? '❌' : '🚨';
       document.getElementById('alertMsg').textContent = latest.message;
-      document.getElementById('alertTime').textContent = latest.timestamp ? latest.timestamp.slice(11, 19) : '';
+      document.getElementById('alertTime').textContent = latest.timestamp ? latest.timestamp.slice(11, 19) + ' ET' : '';
     }
   }
 }
@@ -1078,12 +1181,16 @@ async function poll() {
   await updateHistory();
 }
 
+const DECISION_POLL = 15000;   // Decision log every 15 seconds
+
 setInterval(poll, POLL_INTERVAL);
 setInterval(updateLogs, LOG_POLL);
+setInterval(updateDecisionLog, DECISION_POLL);
 
 // Initial load
 poll();
 updateLogs();
+updateDecisionLog();
 </script>
 
 </body>

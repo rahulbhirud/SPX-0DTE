@@ -25,11 +25,12 @@ import time
 import logging
 import threading
 import traceback
-from datetime import datetime, time as dtime, timedelta, date
+from datetime import datetime, time as dtime, timedelta, date, timezone
 from dataclasses import dataclass, field, asdict
 from enum import Enum
 from typing import Optional, List, Dict, Callable
 from collections import deque
+from zoneinfo import ZoneInfo
 
 import requests
 import numpy as np
@@ -39,6 +40,13 @@ import pandas as pd
 # CONFIG — imported from config.py (the only file you ever edit)
 # ═══════════════════════════════════════════════════════════════
 from config import Config
+
+# ── Timezone helper ───────────────────────────────────────────
+ET = ZoneInfo("America/New_York")
+
+def now_et() -> datetime:
+    """Return current time in US Eastern (handles EST/EDT automatically)."""
+    return datetime.now(ET)
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -59,7 +67,7 @@ class TradingLogger:
         fh = logging.FileHandler(Config.LOG_FILE)
         fh.setLevel(logging.DEBUG)
         fh.setFormatter(logging.Formatter(
-            "%(asctime)s | %(levelname)-7s | %(message)s",
+            "%(asctime)s ET | %(levelname)-7s | %(message)s",
             datefmt="%Y-%m-%d %H:%M:%S"
         ))
         self.logger.addHandler(fh)
@@ -67,14 +75,17 @@ class TradingLogger:
         ch = logging.StreamHandler()
         ch.setLevel(logging.INFO)
         ch.setFormatter(logging.Formatter(
-            "%(asctime)s | %(levelname)-7s | %(message)s",
+            "%(asctime)s ET | %(levelname)-7s | %(message)s",
             datefmt="%H:%M:%S"
         ))
         self.logger.addHandler(ch)
 
+        # Force logging to use Eastern Time
+        logging.Formatter.converter = lambda *args: now_et().timetuple()
+
     def _store(self, level: str, msg: str, category: str = "SYSTEM"):
         entry = {
-            "timestamp": datetime.now().isoformat(),
+            "timestamp": now_et().isoformat(),
             "level": level,
             "category": category,
             "message": msg,
@@ -202,7 +213,7 @@ class EconomicCalendar:
 
     def load_today(self):
         """Load economic events for today. Called once at session start."""
-        today = date.today()
+        today = now_et().date()
         if self.last_load_date == today:
             return
         self.last_load_date = today
@@ -277,7 +288,7 @@ class EconomicCalendar:
         Returns (is_blackout: bool, event_name: str).
         """
         if check_time is None:
-            check_time = datetime.now().time()
+            check_time = now_et().time()
 
         for event in self.today_events:
             evt_time = event["time"]
@@ -288,7 +299,7 @@ class EconomicCalendar:
                 return True, event["name"]
 
             # Calculate blackout window: 10 min before → blackout_min after
-            evt_dt = datetime.combine(date.today(), evt_time)
+            evt_dt = datetime.combine(now_et().date(), evt_time)
             start = (evt_dt - timedelta(minutes=10)).time()
             end = (evt_dt + timedelta(minutes=blackout)).time()
 
@@ -876,7 +887,7 @@ class OpenTrade:
             "filled": self.filled,
             "current_price": self.current_price,
             "unrealized_pnl": self.unrealized_pnl,
-            "elapsed_min": round((datetime.now() - self.entry_time).seconds / 60, 1),
+            "elapsed_min": round((now_et() - self.entry_time).seconds / 60, 1),
         }
 
 @dataclass
@@ -928,6 +939,10 @@ class MeanReversionEngine:
         self.cooldown_until: Optional[datetime] = None
         self.account_balance: float = 0.0
 
+        # Decision log (5-min summaries explaining why no trade)
+        self._decision_log: deque = deque(maxlen=200)
+        self._last_decision_time: Optional[datetime] = None
+
         # Control
         self.stop_event = threading.Event()
         self.engine_active = False
@@ -954,7 +969,7 @@ class MeanReversionEngine:
 
         # Check if today is a valid trading day (not weekend / holiday)
         if not self._is_trading_day():
-            today = date.today()
+            today = now_et().date()
             if today.weekday() >= 5:
                 reason = "Weekend (market closed)"
             else:
@@ -1086,7 +1101,7 @@ class MeanReversionEngine:
 
             # In-session and time checks
             in_session = bool(self._in_session())
-            now_time = datetime.now().time()
+            now_time = now_et().time()
             before_cutoff = bool(now_time <= Config.NO_ENTRY_AFTER)
             is_blackout, blackout_event = self.calendar.is_blackout()
             is_blackout = bool(is_blackout)
@@ -1148,6 +1163,10 @@ class MeanReversionEngine:
 
         return snapshot
 
+    def get_decision_log(self, limit=50) -> List[dict]:
+        """Return recent decision summaries for dashboard."""
+        return list(self._decision_log)[-limit:]
+
     def get_trade_history(self) -> List[dict]:
         """Return trade history for dashboard."""
         return [
@@ -1179,7 +1198,7 @@ class MeanReversionEngine:
                     if self.open_trade and self.open_trade.filled:
                         self._check_position()
                     # EOD close check
-                    if datetime.now().time() >= Config.EOD_CLOSE_TIME:
+                    if now_et().time() >= Config.EOD_CLOSE_TIME:
                         if self.open_trade:
                             self._force_close("EOD")
             except Exception as e:
@@ -1203,7 +1222,7 @@ class MeanReversionEngine:
                 last_heartbeat = now
 
             # EOD summary at 4:01 PM
-            if datetime.now().time() >= dtime(16, 1):
+            if now_et().time() >= dtime(16, 1):
                 self._send_daily_summary()
                 self.stop_event.wait(timeout=3600)  # Wait until next day
 
@@ -1264,34 +1283,145 @@ class MeanReversionEngine:
                 "DATA"
             )
 
-            # Skip if trending
-            if self.current_regime == Regime.TRENDING:
+            # ── Build decision context for every bar ──
+            close = float(row["close"])
+            vwap_val = float(row.get("vwap", close))
+            rsi_val = float(row.get("rsi", 50))
+            bb_upper = float(row.get("bb_upper", close + 10))
+            bb_lower = float(row.get("bb_lower", close - 10))
+            bb_mid = float(row.get("bb_mid", close))
+            volume = float(row.get("volume", 0))
+            vol_avg_val = float(row.get("vol_avg", 1))
+            vwap_dev = (close - vwap_val) / vwap_val if vwap_val > 0 else 0
+            vol_ratio = volume / vol_avg_val if vol_avg_val > 0 else 0
+            vol_ok = volume > Config.VOL_MULTIPLIER * vol_avg_val if vol_avg_val > 0 else False
+            candle_bull = bool(Indicators.is_reversal_candle(row, prev, "bull"))
+            candle_bear = bool(Indicators.is_reversal_candle(row, prev, "bear"))
+
+            is_blackout, blackout_event = self.calendar.is_blackout()
+            in_session = self._in_session()
+            within_limits = self._within_limits()
+            after_cutoff = now_et().time() > Config.NO_ENTRY_AFTER
+            is_trending = self.current_regime == Regime.TRENDING
+
+            # Determine the primary blocking reason (first gate that fails)
+            skip_reason = None
+            if is_trending:
+                skip_reason = f"Regime is TRENDING (ADX={adx_val:.1f}, VIX={vix:.1f})"
+            elif is_blackout:
+                skip_reason = f"Economic blackout: {blackout_event}"
+            elif not within_limits:
+                if self.daily_pnl <= -(self.account_balance * Config.MAX_DAILY_LOSS_PCT):
+                    skip_reason = f"Daily loss limit hit (${self.daily_pnl:.2f})"
+                elif self.trades_today >= Config.MAX_TRADES_PER_DAY:
+                    skip_reason = f"Max trades reached ({self.trades_today}/{Config.MAX_TRADES_PER_DAY})"
+                elif self.cooldown_until:
+                    skip_reason = f"Cooldown active until {self.cooldown_until.strftime('%H:%M')} ET"
+                else:
+                    skip_reason = "Risk limits not met"
+            elif self.open_trade:
+                skip_reason = f"Already in trade: {self.open_trade.option_symbol}"
+            elif after_cutoff:
+                skip_reason = f"Past entry cutoff ({Config.NO_ENTRY_AFTER.strftime('%H:%M')} ET)"
+
+            # Build per-condition detail for LONG and SHORT
+            long_checks = [
+                ("Price < Lower BB", bool(close < bb_lower), f"{close:.2f} vs {bb_lower:.2f}"),
+                (f"VWAP Dev < -{Config.VWAP_OFFSET*100:.1f}%", bool(vwap_dev < -Config.VWAP_OFFSET), f"{vwap_dev*100:.2f}%"),
+                (f"RSI < {Config.RSI_OVERSOLD}", bool(rsi_val < Config.RSI_OVERSOLD), f"{rsi_val:.1f}"),
+                (f"ADX < {Config.ADX_THRESHOLD}", bool(adx_val < Config.ADX_THRESHOLD), f"{adx_val:.1f}"),
+                (f"Vol > {Config.VOL_MULTIPLIER}x avg", bool(vol_ok), f"{vol_ratio:.2f}x"),
+                ("Bull reversal candle", candle_bull, "Yes" if candle_bull else "No"),
+            ]
+            short_checks = [
+                ("Price > Upper BB", bool(close > bb_upper), f"{close:.2f} vs {bb_upper:.2f}"),
+                (f"VWAP Dev > +{Config.VWAP_OFFSET*100:.1f}%", bool(vwap_dev > Config.VWAP_OFFSET), f"{vwap_dev*100:.2f}%"),
+                (f"RSI > {Config.RSI_OVERBOUGHT}", bool(rsi_val > Config.RSI_OVERBOUGHT), f"{rsi_val:.1f}"),
+                (f"ADX < {Config.ADX_THRESHOLD}", bool(adx_val < Config.ADX_THRESHOLD), f"{adx_val:.1f}"),
+                (f"Vol > {Config.VOL_MULTIPLIER}x avg", bool(vol_ok), f"{vol_ratio:.2f}x"),
+                ("Bear reversal candle", candle_bear, "Yes" if candle_bear else "No"),
+            ]
+
+            long_passed = sum(1 for _, ok, _ in long_checks if ok)
+            short_passed = sum(1 for _, ok, _ in short_checks if ok)
+            best_side = "LONG" if long_passed >= short_passed else "SHORT"
+            best_checks = long_checks if best_side == "LONG" else short_checks
+            best_passed = max(long_passed, short_passed)
+
+            # Log decision summary every 5 minutes
+            now = now_et()
+            should_log = (
+                self._last_decision_time is None
+                or (now - self._last_decision_time).total_seconds() >= 300
+            )
+            if should_log:
+                self._last_decision_time = now
+
+                # Build the summary entry
+                failing = [name for name, ok, _ in best_checks if not ok]
+                passing = [name for name, ok, _ in best_checks if ok]
+
+                summary = {
+                    "timestamp": now.isoformat(),
+                    "close": round(close, 2),
+                    "regime": self.current_regime.value,
+                    "vix": round(vix, 1),
+                    "best_side": best_side,
+                    "conditions_met": best_passed,
+                    "conditions_total": len(best_checks),
+                    "passing": passing,
+                    "failing": failing,
+                    "skip_reason": skip_reason,
+                    "indicators": {
+                        "rsi": round(rsi_val, 1),
+                        "adx": round(adx_val, 1),
+                        "vwap_dev_pct": round(vwap_dev * 100, 2),
+                        "bb_lower": round(bb_lower, 2),
+                        "bb_mid": round(bb_mid, 2),
+                        "bb_upper": round(bb_upper, 2),
+                        "vol_ratio": round(vol_ratio, 2),
+                        "candle_bull": candle_bull,
+                        "candle_bear": candle_bear,
+                    },
+                    "long_score": f"{long_passed}/{len(long_checks)}",
+                    "short_score": f"{short_passed}/{len(short_checks)}",
+                    "long_detail": [{"name": n, "pass": bool(ok), "value": v} for n, ok, v in long_checks],
+                    "short_detail": [{"name": n, "pass": bool(ok), "value": v} for n, ok, v in short_checks],
+                }
+                self._decision_log.append(summary)
+
+                # Log a readable version to console/file
+                fail_str = ", ".join(failing) if failing else "ALL MET"
+                reason_str = f" | Gate: {skip_reason}" if skip_reason else ""
+                log.info(
+                    f"DECISION: {best_side} {best_passed}/{len(best_checks)} conditions"
+                    f" | Failing: [{fail_str}]{reason_str}",
+                    "DECISION"
+                )
+
+            # ── Gate checks (original flow) ──
+            if is_trending:
                 return
 
-            # Skip if economic blackout
-            is_blackout, event = self.calendar.is_blackout()
             if is_blackout:
-                log.info(f"Skipping — economic blackout: {event}", "CALENDAR")
+                log.info(f"Skipping — economic blackout: {blackout_event}", "CALENDAR")
                 return
 
-            # Check risk limits
-            if not self._within_limits():
+            if not within_limits:
                 return
 
-            # If already in a trade, don't enter another
             if self.open_trade:
                 return
 
-            # No new entries after 2 PM (theta decay too aggressive)
-            if datetime.now().time() > Config.NO_ENTRY_AFTER:
+            if after_cutoff:
                 return
 
             # Detect signal
             signal = self._detect_signal(row, prev)
 
             if signal != Signal.NONE:
-                log.trade(f"SIGNAL DETECTED: {signal.value.upper()} at {float(row['close']):.2f}")
-                self._execute_entry(signal, float(row["close"]))
+                log.trade(f"SIGNAL DETECTED: {signal.value.upper()} at {close:.2f}")
+                self._execute_entry(signal, close)
 
         except Exception as e:
             log.error(f"Bar processing error: {traceback.format_exc()}", "ENGINE")
@@ -1429,7 +1559,7 @@ class MeanReversionEngine:
                 quantity=qty,
                 risk_amount=risk_dollars,
                 reward_amount=reward_dollars,
-                entry_time=datetime.now(),
+                entry_time=now_et(),
                 entry_order_id=entry_order_id,
                 sl_order_id=sl_order_id,
                 tp_order_id=tp_order_id,
@@ -1454,7 +1584,7 @@ class MeanReversionEngine:
             return
 
         trade = self.open_trade
-        elapsed = (datetime.now() - trade.entry_time).total_seconds() / 60
+        elapsed = (now_et() - trade.entry_time).total_seconds() / 60
 
         # Update current option price
         quote = self.api.get_option_quote(trade.option_symbol)
@@ -1578,7 +1708,7 @@ class MeanReversionEngine:
                         self.consec_losses += 1
                         if self.consec_losses >= Config.MAX_CONSECUTIVE_LOSS:
                             self.cooldown_until = (
-                                datetime.now()
+                                now_et()
                                 + timedelta(minutes=Config.COOLDOWN_AFTER_LOSS)
                             )
                             log.alert(
@@ -1610,7 +1740,7 @@ class MeanReversionEngine:
 
     def _build_option_symbol(self, spx_price: float, signal: Signal) -> str:
         """Build TradeStation SPX option symbol: $SPX.X YYMMDDCNNNNN"""
-        today = datetime.now().strftime("%y%m%d")
+        today = now_et().strftime("%y%m%d")
         strike = round(spx_price)
         opt_type = "C" if signal == Signal.LONG else "P"
         return f"$SPX.X {today}{opt_type}{strike:05d}"
@@ -1618,7 +1748,7 @@ class MeanReversionEngine:
     @staticmethod
     def _is_trading_day() -> bool:
         """Return True only on regular market days (Mon-Fri, non-holiday)."""
-        today = date.today()
+        today = now_et().date()
         # Weekend check (5 = Saturday, 6 = Sunday)
         if today.weekday() >= 5:
             return False
@@ -1631,7 +1761,7 @@ class MeanReversionEngine:
         """Return True only during the trading window on a valid trading day."""
         if not self._is_trading_day():
             return False
-        now = datetime.now().time()
+        now = now_et().time()
         return Config.SESSION_START <= now <= Config.SESSION_END
 
     def _within_limits(self) -> bool:
@@ -1645,11 +1775,11 @@ class MeanReversionEngine:
             return False
 
         # Cooldown after consecutive losses
-        if self.cooldown_until and datetime.now() < self.cooldown_until:
+        if self.cooldown_until and now_et() < self.cooldown_until:
             return False
 
         # Clear cooldown if expired
-        if self.cooldown_until and datetime.now() >= self.cooldown_until:
+        if self.cooldown_until and now_et() >= self.cooldown_until:
             self.cooldown_until = None
             self.consec_losses = 0
             log.info("Cooldown expired — resuming trading", "RISK")
@@ -1671,7 +1801,7 @@ class MeanReversionEngine:
             pnl=pnl,
             result=result,
             entry_time=trade.entry_time.isoformat(),
-            exit_time=datetime.now().isoformat(),
+            exit_time=now_et().isoformat(),
             regime=self.current_regime.value,
         )
         self.trade_history.append(record)
@@ -1767,6 +1897,11 @@ def create_dashboard_app(engine: MeanReversionEngine):
     @app.route("/api/alerts")
     def alerts():
         return jsonify(log.get_alerts())
+
+    @app.route("/api/decisions")
+    def decisions():
+        limit = int(request.args.get("limit", 50))
+        return jsonify(engine.get_decision_log(limit))
 
     @app.route("/api/orders")
     def orders():
