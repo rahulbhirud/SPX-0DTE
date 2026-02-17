@@ -943,6 +943,7 @@ class MeanReversionEngine:
         # Decision log (5-min summaries explaining why no trade)
         self._decision_log: deque = deque(maxlen=200)
         self._last_decision_time: Optional[datetime] = None
+        self._last_tick_log_time: float = 0  # throttled tick status log
 
         # Control
         self.stop_event = threading.Event()
@@ -1275,7 +1276,20 @@ class MeanReversionEngine:
                     for col in ["open", "high", "low", "close", "volume"]:
                         if col in new_row.columns:
                             self.bars_df.at[self.bars_df.index[-1], col] = new_row[col].iloc[0]
-                    # Don't recompute indicators or process signals on intra-bar ticks
+
+                    # Throttled status log every 30s so dashboard stays alive
+                    now_mono = time.time()
+                    if now_mono - self._last_tick_log_time >= 30:
+                        self._last_tick_log_time = now_mono
+                        cur_close = float(new_row["close"].iloc[0]) if "close" in new_row.columns else 0
+                        last_row = self.bars_df.iloc[-1]
+                        log.info(
+                            f"TICK: {cur_close:.2f} | RSI:{float(last_row.get('rsi',0)):.1f} "
+                            f"| ADX:{float(last_row.get('adx',0)):.1f} "
+                            f"| VIX:{self.api._vix_cache['value']:.1f} "
+                            f"| Regime:{self.current_regime.value}",
+                            "DATA"
+                        )
                     return
 
             # NEW bar: previous bar is now complete — append and process
