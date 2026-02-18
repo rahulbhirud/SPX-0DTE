@@ -69,16 +69,16 @@ class Config:
     # ═══════════════════════════════════════════════════════════
 
     BB_PERIOD       = 20        # Bollinger Band lookback (bars)
-    BB_STD          = 2.0       # Bollinger Band standard deviations
+    BB_STD          = 1.8       # Bollinger Band std devs (was 2.0 — narrower bands trigger more often)
     RSI_PERIOD      = 9         # RSI lookback (bars)
-    RSI_OVERBOUGHT  = 75        # RSI overbought threshold (short signal)
-    RSI_OVERSOLD    = 25        # RSI oversold threshold (long signal)
+    RSI_OVERBOUGHT  = 70        # RSI overbought threshold (was 75 — easier to trigger short)
+    RSI_OVERSOLD    = 30        # RSI oversold threshold (was 25 — easier to trigger long)
     ADX_PERIOD      = 14        # ADX lookback (bars)
-    ADX_THRESHOLD   = 25        # ADX below this = mean reverting regime
-    VWAP_OFFSET     = 0.003     # Min VWAP deviation (0.3%) to qualify
-    VOL_MULTIPLIER  = 1.2       # Volume must exceed this × 20-bar avg
+    ADX_THRESHOLD   = 30        # ADX below this = mean reverting (was 25 — allows mild trends)
+    VWAP_OFFSET     = 0.002     # Min VWAP deviation 0.2% (was 0.3%)
+    VOL_MULTIPLIER  = 1.0       # Volume ≥ 1× avg (was 1.2 — no spike required)
     RR_RATIO        = 2.0       # Risk:Reward ratio (1:2 = TP at 2× risk)
-    TIME_STOP_MIN   = 25        # Close if trade open longer than N minutes
+    TIME_STOP_MIN   = 30        # Close if trade open longer than N min (was 25 — more room)
     RISK_PER_TRADE  = 0.33      # Risk this fraction of option premium
 
     # ═══════════════════════════════════════════════════════════
@@ -88,18 +88,18 @@ class Config:
 
     MAX_DAILY_LOSS_PCT    = 0.03    # Stop trading if day P/L ≤ −3% of account
     MAX_CONSECUTIVE_LOSS  = 3       # Pause after N consecutive losses
-    MAX_TRADES_PER_DAY    = 8       # Max trades allowed per session
+    MAX_TRADES_PER_DAY    = 12      # Max trades allowed per session (was 8)
     MAX_POSITION_PCT      = 0.02    # Max 2% of account risked per trade
-    MAX_SPREAD            = 1.50    # Skip option if bid-ask spread > $1.50
+    MAX_SPREAD            = 2.00    # Skip option if bid-ask spread > $2.00 (was $1.50)
     COOLDOWN_AFTER_LOSS   = 30      # Minutes to pause after hitting consec loss limit
 
     # ═══════════════════════════════════════════════════════════
     # SESSION TIMES (Eastern Time)
     # ═══════════════════════════════════════════════════════════
 
-    SESSION_START   = dtime(9, 45)      # Skip first 15 min of market open
+    SESSION_START   = dtime(9, 35)      # Start 5 min after open (was 9:45)
     SESSION_END     = dtime(15, 30)     # Stop monitoring at 3:30 PM
-    NO_ENTRY_AFTER  = dtime(14, 0)      # No new entries after 2:00 PM (theta decay)
+    NO_ENTRY_AFTER  = dtime(14, 30)     # No new entries after 2:30 PM (was 2:00 PM)
     EOD_CLOSE_TIME  = dtime(15, 25)     # Force close all positions at 3:25 PM
 
     # ═══════════════════════════════════════════════════════════
